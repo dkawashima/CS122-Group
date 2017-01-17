@@ -8,6 +8,7 @@ import edu.caltech.nanodb.relations.ColumnType;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SQLDataType;
 import edu.caltech.nanodb.relations.Tuple;
+import org.apache.log4j.Logger;
 
 
 /**
@@ -41,6 +42,8 @@ import edu.caltech.nanodb.relations.Tuple;
  */
 public abstract class PageTuple implements Tuple {
 
+    /** A logging object for reporting anything interesting that happens. */
+    private static Logger logger = Logger.getLogger(PageTuple.class);
     /**
      * This value is used in {@link #valueOffsets} when a column value is set to
      * <tt>NULL</tt>.
@@ -501,6 +504,9 @@ public abstract class PageTuple implements Tuple {
          * the special NULL_OFFSET constant as their offset in the tuple.)
          */
 
+        /*logger.debug(String.format("Updating tuple from column %d with " +
+                "length %d at " + "offset %d", , offset, length)); */
+
         if (isNullValue(iCol)) {
             return;
         }
@@ -519,12 +525,12 @@ public abstract class PageTuple implements Tuple {
         deleteTupleDataRange(valueOffsets[iCol], storageSize);
 
         valueOffsets[iCol] = NULL_OFFSET;
-        for (int i = iCol + 1; i < valueOffsets.length; i++){
+        for (int i = iCol - 1; i >= 0; i--){
             if (valueOffsets[i] != NULL_OFFSET){
-                valueOffsets[i] -= storageSize;
+                valueOffsets[i] += storageSize;
             }
         }
-        endOffset -= storageSize;
+        pageOffset += storageSize;
     }
 
 
@@ -569,6 +575,7 @@ public abstract class PageTuple implements Tuple {
          * Finally, once you have made space for the new column value, you can
          * write the value itself using the writeNonNullValue() method.
          */
+        logger.debug(String.format("Updating column %d:", iCol));
         if (getNullFlag(iCol)) {
             setNullFlag(iCol, false);
         }
@@ -588,7 +595,8 @@ public abstract class PageTuple implements Tuple {
         if (valueOffsets[iCol] == NULL_OFFSET){
             boolean nonNullExists = false;
             for (int i = iCol - 1; i >= 0; i--){
-                if (valueOffsets[iCol] != NULL_OFFSET){
+                logger.debug(String.format("Going through column %d, offset %d:", i, valueOffsets[i]));
+                if (valueOffsets[i] != NULL_OFFSET){
                     ColumnType colTypePrev = schema.getColumnInfo(i).getType();
                     int prevDataLength = 0;
                     if (colTypePrev.getBaseType() == SQLDataType.VARCHAR) {
@@ -604,6 +612,7 @@ public abstract class PageTuple implements Tuple {
                 valueOffsets[iCol] = getDataStartOffset();
             }
             insertTupleDataRange(valueOffsets[iCol], newSize);
+            valueOffsets[iCol] -= newSize;
         } else {
             if (oldSize - newSize > 0){
                 deleteTupleDataRange(valueOffsets[iCol], oldSize - newSize);
@@ -612,13 +621,14 @@ public abstract class PageTuple implements Tuple {
             }
         }
 
-        for (int i = iCol + 1; i < valueOffsets.length; i ++){
+        for (int i = iCol - 1; i >= 0; i --){
             if (valueOffsets[i] != NULL_OFFSET){
-                valueOffsets[i] -= (oldSize - newSize);
+                logger.debug(String.format("Going through column %d, offset %d:", i, valueOffsets[i]));
+                valueOffsets[i] += (oldSize - newSize);
             }
         }
+        pageOffset += (oldSize - newSize);
         writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
-        endOffset -= (oldSize - newSize);
 
     }
 
