@@ -500,7 +500,31 @@ public abstract class PageTuple implements Tuple {
          * properly as well.  (Note that columns whose value is NULL will have
          * the special NULL_OFFSET constant as their offset in the tuple.)
          */
-        throw new UnsupportedOperationException("TODO:  Implement!");
+
+        if (isNullValue(iCol)) {
+            return;
+        }
+
+        setNullFlag(iCol, true);
+        ColumnType colType = schema.getColumnInfo(iCol).getType();
+
+        int dataLength = 0;
+        if (colType.getBaseType() == SQLDataType.VARCHAR) {
+            String strValue = TypeConverter.getStringValue(getColumnValue(iCol));
+            dataLength = strValue.length();
+        }
+
+        int storageSize = getStorageSize(colType, dataLength);
+
+        deleteTupleDataRange(valueOffsets[iCol], storageSize);
+
+        valueOffsets[iCol] = NULL_OFFSET;
+        for (int i = iCol + 1; i < valueOffsets.length; i++){
+            if (valueOffsets[i] != NULL_OFFSET){
+                valueOffsets[i] -= storageSize;
+            }
+        }
+        endOffset -= storageSize;
     }
 
 
@@ -545,7 +569,57 @@ public abstract class PageTuple implements Tuple {
          * Finally, once you have made space for the new column value, you can
          * write the value itself using the writeNonNullValue() method.
          */
-        throw new UnsupportedOperationException("TODO:  Implement!");
+        if (getNullFlag(iCol)) {
+            setNullFlag(iCol, false);
+        }
+        ColumnType colType = schema.getColumnInfo(iCol).getType();
+
+        int oldDataLength = 0;
+        int newDataLength = 0;
+        if (colType.getBaseType() == SQLDataType.VARCHAR) {
+            String oldStrValue = TypeConverter.getStringValue(getColumnValue(iCol));
+            oldDataLength = oldStrValue.length();
+            String newStrValue = TypeConverter.getStringValue(value);
+            newDataLength = newStrValue.length();
+        }
+
+        int oldSize = getStorageSize(colType, oldDataLength);
+        int newSize = getStorageSize(colType, newDataLength);
+        if (valueOffsets[iCol] == NULL_OFFSET){
+            boolean nonNullExists = false;
+            for (int i = iCol - 1; i >= 0; i--){
+                if (valueOffsets[iCol] != NULL_OFFSET){
+                    ColumnType colTypePrev = schema.getColumnInfo(i).getType();
+                    int prevDataLength = 0;
+                    if (colTypePrev.getBaseType() == SQLDataType.VARCHAR) {
+                        String prevStrValue = TypeConverter.getStringValue(getColumnValue(i));
+                        prevDataLength = prevStrValue.length();
+                    }
+                    valueOffsets[iCol] = valueOffsets[i] + getStorageSize(colTypePrev, prevDataLength);
+                    nonNullExists = true;
+                    break;
+                }
+            }
+            if (!nonNullExists){
+                valueOffsets[iCol] = getDataStartOffset();
+            }
+            insertTupleDataRange(valueOffsets[iCol], newSize);
+        } else {
+            if (oldSize - newSize > 0){
+                deleteTupleDataRange(valueOffsets[iCol], oldSize - newSize);
+            } else {
+                insertTupleDataRange(valueOffsets[iCol], newSize - oldSize);
+            }
+        }
+
+        for (int i = iCol + 1; i < valueOffsets.length; i ++){
+            if (valueOffsets[i] != NULL_OFFSET){
+                valueOffsets[i] -= (oldSize - newSize);
+            }
+        }
+        writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
+        endOffset -= (oldSize - newSize);
+
     }
 
 
