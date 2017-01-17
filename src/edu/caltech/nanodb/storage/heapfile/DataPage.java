@@ -584,7 +584,6 @@ public class DataPage {
      * @param slot the slot of the tuple to delete
      */
     public static void deleteTuple(DBPage dbPage, int slot) {
-
         if (slot < 0) {
             throw new IllegalArgumentException(
                 "Slot must be nonnegative; got " + slot);
@@ -592,12 +591,37 @@ public class DataPage {
 
         int numSlots = getNumSlots(dbPage);
 
+        logger.debug(String.format("Number of slots before deletion: %d",
+                numSlots));
         if (slot >= numSlots) {
             throw new IllegalArgumentException("Page only has " + numSlots +
                 " slots, but slot " + slot + " was requested for deletion.");
         }
+        int offset = getSlotValue(dbPage, slot);
+        int length = getTupleLength(dbPage, slot);
+        logger.debug(String.format("Deleting tuple from slot %d with " +
+                "length %d at " + "offset %d", slot, offset, length));
+        if (offset == EMPTY_SLOT) {
+            throw new IllegalArgumentException("No offset exists in " +
+                    "empty slot" + slot);
+        }
+        deleteTupleDataRange(dbPage, offset, length);
+        setSlotValue(dbPage, slot, EMPTY_SLOT);
 
-        // TODO:  Complete this implementation.
-        throw new UnsupportedOperationException("TODO:  Implement!");
+        int deletedSlots = 0;
+        for (int iSlot = numSlots - 1; iSlot >= 0; iSlot--) {
+            if (getSlotValue(dbPage, iSlot) == EMPTY_SLOT) {
+                deletedSlots++;
+            }
+            else {
+                break;
+            }
+        }
+        if (deletedSlots > 0) {
+            setNumSlots(dbPage, numSlots - deletedSlots);
+        }
+        int numSlots_after = getNumSlots(dbPage);
+        logger.debug(String.format("Number of slots after deletion: %d",
+                numSlots_after));
     }
 }
