@@ -47,6 +47,9 @@ public class QueryEvaluator {
 
                 // Do whatever we're supposed to do with the tuple.
                 processor.process(tuple);
+                if (tuple.isPinned()) {
+                    tuple.unpin();
+                }
             }
         }
         finally {

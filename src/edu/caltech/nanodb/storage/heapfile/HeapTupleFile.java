@@ -140,6 +140,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
                     first = new HeapFilePageTuple(schema, dbPage, iSlot, offset);
                     break page_scan;
                 }
+                dbPage.unpin();
             }
         }
         catch (EOFException e) {
@@ -249,6 +250,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             // tuple in that page.
 
             try {
+                dbPage.unpin();
                 dbPage = storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
                 nextSlot = 0;
             }
@@ -258,7 +260,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 break;
             }
         }
-
         return nextTup;
     }
 
@@ -333,6 +334,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             // If we reached this point then the page doesn't have enough
             // space, so go on to the next data page.
+            dbPage.unpin();
             dbPage = null;  // So the next section will work properly.
             pageNo++;
         }
@@ -357,6 +359,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         DataPage.sanityCheck(dbPage);
 
+        if (pageTup.isPinned()) {
+            pageTup.unpin();
+        }
         return pageTup;
     }
 
@@ -389,6 +394,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         DBPage dbPage = ptup.getDBPage();
         DataPage.sanityCheck(dbPage);
+        if (ptup.isPinned()) {
+            ptup.unpin();
+        }
     }
 
 
@@ -408,6 +416,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         // Note that we don't invalidate the page-tuple when it is deleted,
         // so that the tuple can still be unpinned, etc.
+        if (ptup.isPinned()) {
+            ptup.unpin();
+        }
     }
 
 
