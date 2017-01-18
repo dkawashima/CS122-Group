@@ -337,7 +337,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             dbPage = storageManager.loadDBPage(dbFile, pageNo, true);
             DataPage.initNewPage(dbPage);
 
-            headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, );        
+            headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
         } 
         else {    
             pageNo = begin_list_pointer; 
@@ -428,12 +428,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         if (dbPage == null) {
             // Try to create a new page, and add it to the start of the free
             // block linked list
-            pageNo = dbFile.getNumPages()
+            pageNo = dbFile.getNumPages();
             logger.debug("Creating new page " + pageNo + " to store new tuple.");
             dbPage = storageManager.loadDBPage(dbFile, pageNo, true);
             DataPage.initNewPage(dbPage);
 
-            old_head = headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+            int old_head = headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
             dbPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, old_head);
 
@@ -517,7 +517,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             }
 
-            int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
+            //nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
             // A next = 0 indicates that the block is out of the list
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0); 
 

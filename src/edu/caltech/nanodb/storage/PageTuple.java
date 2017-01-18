@@ -592,6 +592,7 @@ public abstract class PageTuple implements Tuple {
 
         int oldSize = getStorageSize(colType, oldDataLength);
         int newSize = getStorageSize(colType, newDataLength);
+        logger.debug(String.format("oldDataSize: %d, newDataSize: %d:", oldSize, newSize));
         if (valueOffsets[iCol] == NULL_OFFSET){
             boolean nonNullExists = false;
             for (int i = iCol - 1; i >= 0; i--){
@@ -611,13 +612,17 @@ public abstract class PageTuple implements Tuple {
             if (!nonNullExists){
                 valueOffsets[iCol] = getDataStartOffset();
             }
+            //logger.debug(String.format("oldOffset: %d", valueOffsets[iCol]));
             insertTupleDataRange(valueOffsets[iCol], newSize);
             valueOffsets[iCol] -= newSize;
         } else {
+            logger.debug(String.format("oldOffset: %d", valueOffsets[iCol]));
             if (oldSize - newSize > 0){
                 deleteTupleDataRange(valueOffsets[iCol], oldSize - newSize);
+                valueOffsets[iCol] -= (newSize - oldSize);
             } else {
                 insertTupleDataRange(valueOffsets[iCol], newSize - oldSize);
+                valueOffsets[iCol] -= (newSize - oldSize);
             }
         }
 
@@ -628,6 +633,7 @@ public abstract class PageTuple implements Tuple {
             }
         }
         pageOffset += (oldSize - newSize);
+        logger.debug(String.format("Writing non-null value at column %d, offset %d:", iCol, valueOffsets[iCol]));
         writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
 
     }

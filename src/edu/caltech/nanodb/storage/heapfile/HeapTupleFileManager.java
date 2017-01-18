@@ -49,6 +49,15 @@ public class HeapTupleFileManager implements TupleFileManager {
         HeapTupleFile tupleFile = new HeapTupleFile(storageManager, this,
             dbFile, schema, stats);
         saveMetadata(tupleFile);
+
+        // Table schema is stored into the header page, so get it and prepare
+        // to write out the schema information.
+        DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
+
+        // Update the header page to store the pointers to the begining and
+        // end of the free block linked list.
+        headerPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, -1);
+
         return tupleFile;
     }
 
@@ -58,13 +67,14 @@ public class HeapTupleFileManager implements TupleFileManager {
 
         logger.info("Opening existing heap tuple file " + dbFile);
 
+
         // Table schema is stored into the header page, so get it and prepare
         // to write out the schema information.
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
-
+        /*
         // Update the header page to store the pointers to the begining and 
         // end of the free block linked list.
-        headerPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, -1);
+        headerPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, -1); */
 
         PageReader hpReader = new PageReader(headerPage);
         // Skip past the page-size value.
