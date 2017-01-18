@@ -220,7 +220,7 @@ public class DataPage {
      * @return the index where the tuple data ends in this data page
      */
     public static int getTupleDataEnd(DBPage dbPage) {
-        return dbPage.getPageSize();
+        return dbPage.getPageSize() - 4; // Save 4 bytes to store pointer to next free block.
     }
 
 

@@ -304,48 +304,124 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         // Search for a page to put the tuple in.  If we hit the end of the
         // data file, create a new page.
-        int pageNo = 1;
+
+        // Load the header page and access the free block linked list pointers. 
+        DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
+        int begin_list_pointer = 
+            headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+        int prevPageNo = 0; 
+        int pageNo = 0;
         DBPage dbPage = null;
-        while (true) {
-            // Try to load the page without creating a new one.
-            try {
-                dbPage = storageManager.loadDBPage(dbFile, pageNo);
-            }
-            catch (EOFException eofe) {
-                // Couldn't load the current page, because it doesn't exist.
-                // Break out of the loop.
-                logger.debug("Reached end of data file without finding " +
-                             "space for new tuple.");
-                break;
-            }
 
-            int freeSpace = DataPage.getFreeSpaceInPage(dbPage);
-
-            logger.trace(String.format("Page %d has %d bytes of free space.",
-                         pageNo, freeSpace));
-
-            // If this page has enough free space to add a new tuple, break
-            // out of the loop.  (The "+ 2" is for the new slot entry we will
-            // also need.)
-            if (freeSpace >= tupSize + 2) {
-                logger.debug("Found space for new tuple in page " + pageNo + ".");
-                break;
-            }
-
-            // If we reached this point then the page doesn't have enough
-            // space, so go on to the next data page.
-            dbPage.unpin();
-            dbPage = null;  // So the next section will work properly.
-            pageNo++;
-        }
-
-        if (dbPage == null) {
-            // Try to create a new page at the end of the file.  In this
-            // circumstance, pageNo is *just past* the last page in the data
-            // file.
+        // o might not need..... if else.
+        if(begin_list_pointer == -1) {
+            // make new page
+            pageNo = dbFile.getNumPages();
             logger.debug("Creating new page " + pageNo + " to store new tuple.");
             dbPage = storageManager.loadDBPage(dbFile, pageNo, true);
             DataPage.initNewPage(dbPage);
+
+            headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, );        
+        } 
+        else {    
+            pageNo = begin_list_pointer; 
+            while (true) {
+                // Try to load the page without creating a new one.
+                if(pageNo != -1) {
+                    try { // Just in case linked list does not point 
+                          // to valid block
+                        dbPage = storageManager.loadDBPage(dbFile, pageNo);
+                    }
+                    catch (EOFException eofe) {
+                        // Couldn't load the current page, because it doesn't exist.
+                        // Break out of the loop.
+                        logger.debug("Reached invalid block.");
+                        break;
+                    }
+                }
+                else {
+                    // Couldn't load the current page, because it doesn't exist.
+                    // Break out of the loop.
+                    logger.debug("Reached end of free block list without " +
+                                 "finding space for new tuple.");
+                    break;
+                }
+
+
+                int freeSpace = DataPage.getFreeSpaceInPage(dbPage);
+
+                logger.trace(String.format("Page %d has %d bytes of free space.",
+                             pageNo, freeSpace));
+
+                // If this page has enough free space to add a new tuple, break
+                // out of the loop.  (The "+ 2" is for the new slot entry we will
+                // also need.)
+                if (freeSpace >= tupSize + 2) {
+                    logger.debug("Found space for new tuple in page " + pageNo + ".");
+                    break;
+                }
+
+                // If we reached this point then the page doesn't have enough
+                // space, so go on to the next data page.
+                prevPageNo = pageNo;
+                pageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
+
+                dbPage.unpin();
+                dbPage = null;  // So the next section will work properly.
+                
+            } 
+
+        }
+
+
+
+        // // DBPage dbPage = null;
+        // while (true) {
+        //     // Try to load the page without creating a new one.
+        //     try {
+        //         dbPage = storageManager.loadDBPage(dbFile, pageNo);
+        //     }
+        //     catch (EOFException eofe) {
+        //         // Couldn't load the current page, because it doesn't exist.
+        //         // Break out of the loop.
+        //         logger.debug("Reached end of data file without finding " +
+        //                      "space for new tuple.");
+        //         break;
+        //     }
+
+        //     int freeSpace = DataPage.getFreeSpaceInPage(dbPage);
+
+        //     logger.trace(String.format("Page %d has %d bytes of free space.",
+        //                  pageNo, freeSpace));
+
+        //     // If this page has enough free space to add a new tuple, break
+        //     // out of the loop.  (The "+ 2" is for the new slot entry we will
+        //     // also need.)
+        //     if (freeSpace >= tupSize + 2) {
+        //         logger.debug("Found space for new tuple in page " + pageNo + ".");
+        //         break;
+        //     }
+
+        //     // If we reached this point then the page doesn't have enough
+        //     // space, so go on to the next data page.
+        //     dbPage.unpin();
+        //     dbPage = null;  // So the next section will work properly.
+        //     pageNo++;
+        // }
+
+        if (dbPage == null) {
+            // Try to create a new page, and add it to the start of the free
+            // block linked list
+            pageNo = dbFile.getNumPages()
+            logger.debug("Creating new page " + pageNo + " to store new tuple.");
+            dbPage = storageManager.loadDBPage(dbFile, pageNo, true);
+            DataPage.initNewPage(dbPage);
+
+            old_head = headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+            headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
+            dbPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, old_head);
+
+               
         }
 
         int slot = DataPage.allocNewTuple(dbPage, tupSize);
@@ -356,6 +432,15 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         HeapFilePageTuple pageTup =
             HeapFilePageTuple.storeNewTuple(schema, dbPage, slot, tupOffset, tup);
+
+        // If the dbPage is 'full,' remove it from the free block list
+        if(DataPage.getFreeSpaceInPage(dbPage) < 12) {
+            DBPage prevdbPage = storageManager.loadDBPage(dbFile, 
+                prevPageNo);
+            int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
+            prevdbPage.writeInt(DataPage.getTupleDataEnd(dbPage), nextdbPageNo);
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
+        }
 
         DataPage.sanityCheck(dbPage);
 
@@ -393,6 +478,46 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         }
 
         DBPage dbPage = ptup.getDBPage();
+
+        // todo
+        int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
+        if(DataPage.getFreeSpaceInPage(dbPage) < 12 && 
+            nextdbPageNo != 0) { 
+
+            // Remove dbpage from list
+            DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
+            int begin_list_pointer = 
+                headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+            int prevPageNo = 0; 
+            int pageNo = begin_list_pointer;
+            DBPage curPage = null;
+
+            while(pageNo != dbPage.getPageNo()) {
+                prevPageNo = pageNo;
+
+                curPage = storageManager.loadDBPage(dbFile, pageNo);
+
+                pageNo = curPage.readInt(DataPage.getTupleDataEnd(dbPage));
+
+            }
+
+            int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
+            // A next = 0 indicates that the block is out of the list
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0); 
+
+            curPage.writeInt(DataPage.getTupleDataEnd(curPage), nextdbPageNo);
+
+        }
+        else if(DataPage.getFreeSpaceInPage(dbPage) >= 12 &&
+            nextdbPageNo == 0) { 
+            DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
+            int begin_list_pointer = 
+                headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
+            headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
+
+        }
+
         DataPage.sanityCheck(dbPage);
         if (ptup.isPinned()) {
             ptup.unpin();
@@ -411,6 +536,15 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         HeapFilePageTuple ptup = (HeapFilePageTuple) tup;
 
         DBPage dbPage = ptup.getDBPage();
+
+        // Add newly free block to free block list.
+        // todo
+        DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
+        int begin_list_pointer = 
+            headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
+        dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
+        headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
+
         DataPage.deleteTuple(dbPage, ptup.getSlot());
         DataPage.sanityCheck(dbPage);
 

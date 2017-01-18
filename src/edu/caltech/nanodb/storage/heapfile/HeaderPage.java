@@ -63,10 +63,17 @@ public class HeaderPage {
 
 
     /**
+     * The offset in the header page where the pointer to the start of the 
+     * free block linked list.
+     */
+    public static final int OFFSET_BEGIN_PTR_START = 6;
+
+
+    /**
      * The offset in the header page where the table schema starts.  This
      * value is an unsigned short.
      */
-    public static final int OFFSET_SCHEMA_START = 6;
+    public static final int OFFSET_SCHEMA_START = 10;
 
 
     /**
