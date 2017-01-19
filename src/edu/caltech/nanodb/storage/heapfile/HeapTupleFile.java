@@ -18,7 +18,7 @@ import edu.caltech.nanodb.relations.Tuple;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.ColumnType;
-import edu.caltech.nanodb.relations.SQLDataType
+import edu.caltech.nanodb.relations.SQLDataType;
 
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
