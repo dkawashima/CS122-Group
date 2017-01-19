@@ -584,16 +584,16 @@ public abstract class PageTuple implements Tuple {
         ColumnType colType = schema.getColumnInfo(iCol).getType();
 
         // Find storage size, difference iff string size changes
-        int oldDataLength = 0;
+        int oldSize = 0;
         int newDataLength = 0;
         if (colType.getBaseType() == SQLDataType.VARCHAR && valueOffsets[iCol] != NULL_OFFSET ) {
-            String oldStrValue = TypeConverter.getStringValue(getColumnValue(iCol));
-            oldDataLength = oldStrValue.length();
+           /* String oldStrValue = TypeConverter.getStringValue(getColumnValue(iCol));
+            oldDataLength = oldStrValue.length();*/
+            oldSize = getColumnValueSize(colType, valueOffsets[iCol]);
             String newStrValue = TypeConverter.getStringValue(value);
             newDataLength = newStrValue.length();
         }
 
-        int oldSize = getStorageSize(colType, oldDataLength);
         int newSize = getStorageSize(colType, newDataLength);
 
         if (valueOffsets[iCol] == NULL_OFFSET){
@@ -605,22 +605,27 @@ public abstract class PageTuple implements Tuple {
                 if (valueOffsets[i] != NULL_OFFSET){
                     logger.debug(String.format("Found nonNULL column %d, offset %d:", i, valueOffsets[i]));
                     ColumnType colTypePrev = schema.getColumnInfo(i).getType();
-                    int prevDataLength = 0;
-                    if (colTypePrev.getBaseType() == SQLDataType.VARCHAR) {
-                        String prevStrValue = TypeConverter.getStringValue(getColumnValue(i));
-                        prevDataLength = prevStrValue.length();
-                    }
-                    valueOffsets[iCol] = valueOffsets[i] + getStorageSize(colTypePrev, prevDataLength);
+                    valueOffsets[iCol] = valueOffsets[i] + getColumnValueSize(colTypePrev, valueOffsets[i]);
                     nonNullExists = true;
                     break;
                 }
             }
             if (!nonNullExists){
                 valueOffsets[iCol] = getDataStartOffset();
+                for (int i = iCol + 1; i < getColumnCount(); i ++){
+                    if (valueOffsets[i] == getDataStartOffset()){
+                        valueOffsets[i] += newSize;
+                        insertTupleDataRange(valueOffsets[iCol] + newSize, newSize);
+                        break;
+                    }
+                }
+            } else {
+                insertTupleDataRange(valueOffsets[iCol], newSize);
+                valueOffsets[iCol] -= newSize;
             }
 
-            insertTupleDataRange(valueOffsets[iCol], newSize);
-            valueOffsets[iCol] -= newSize;
+            /*insertTupleDataRange(valueOffsets[iCol], newSize);
+            valueOffsets[iCol] -= newSize; */
         } else {
             /* Adjust offsets if size of data changes */
             if (oldSize - newSize > 0){
@@ -635,10 +640,10 @@ public abstract class PageTuple implements Tuple {
         for (int i = iCol - 1; i >= 0; i --){
             if (valueOffsets[i] != NULL_OFFSET){
                 logger.debug(String.format("Updating offset %d of column %d:", valueOffsets[i], i));
-                valueOffsets[i] += (oldSize - newSize);
+                valueOffsets[i] -= (newSize - oldSize);
             }
         }
-        pageOffset += (oldSize - newSize);
+        pageOffset -= (newSize - oldSize);
         logger.debug(String.format("Writing non-null value at column %d, offset %d:", iCol, valueOffsets[iCol]));
         writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
 
