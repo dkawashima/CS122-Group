@@ -134,7 +134,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
                     int offset = DataPage.getSlotValue(dbPage, iSlot);
                     if (offset == DataPage.EMPTY_SLOT)
                         continue;
-
+                    else
+                        dbPage.unpin();
                     // This is the first tuple in the file.  Build up the
                     // HeapFilePageTuple object and return it.
                     first = new HeapFilePageTuple(schema, dbPage, iSlot, offset);
@@ -196,6 +197,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
                 " on page " + fptr.getPageNo() + " is empty.");
         }
 
+        if (dbPage.isPinned()) {
+            dbPage.unpin();
+        }
         return new HeapFilePageTuple(schema, dbPage, slot, offset);
     }
 
@@ -203,7 +207,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
     /**
      * Returns the tuple that follows the specified tuple, or {@code null} if
      * there are no more tuples in the file.  This method must operate
-     * correctly regardless of whether the input tuple is pinned or unpinned.
+     * correctly regardless of whether the input tuple is pinned or
+     * ned.
      *
      * @param tup the "previous tuple" that specifies where to start looking
      *        for the next tuple
@@ -261,12 +266,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 nextSlot++;
             }
 
+            dbPage.unpin();
             // If we got here then we reached the end of this page with no
             // tuples.  Go on to the next data-page, and start with the first
             // tuple in that page.
 
             try {
-                dbPage.unpin();
                 dbPage = storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
                 nextSlot = 0;
             }
@@ -275,6 +280,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 // scanning.
                 break;
             }
+        }
+        if (dbPage.isPinned()) {
+            dbPage.unpin();
         }
         return nextTup;
     }
@@ -332,7 +340,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         int prevPageNo = 0; 
         int pageNo = 0;
         DBPage dbPage = null;
-
 
         // o might not need..... if else.
         if(begin_list_pointer == -1) {
@@ -435,11 +442,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             int old_head = headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
+
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), old_head);
 
                
         }
-
+        headerpage.unpin();
         int slot = DataPage.allocNewTuple(dbPage, tupSize);
         int tupOffset = DataPage.getSlotValue(dbPage, slot);
 
@@ -462,11 +470,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 prevdbPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, nextdbPageNo);
             }
 
-
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
+            prevdbPage.unpin();
         }
 
         DataPage.sanityCheck(dbPage);
+        dbPage.unpin();
         return pageTup;
     }
 
@@ -500,14 +509,14 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         DBPage dbPage = ptup.getDBPage();
 
         int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
-        if(DataPage.getFreeSpaceInPage(dbPage) < 12 && 
-            nextdbPageNo != 0) { 
+        if(DataPage.getFreeSpaceInPage(dbPage) < 12 &&
+            nextdbPageNo != 0) {
 
             // Remove dbpage from list
             DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
-            int begin_list_pointer = 
+            int begin_list_pointer =
                 headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
-            int prevPageNo = 0; 
+            int prevPageNo = 0;
             int pageNo = begin_list_pointer;
             DBPage curPage = null;
 
@@ -522,7 +531,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             //nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
             // A next = 0 indicates that the block is out of the list
-            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0); 
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
 
             // curPage is the header page
             if(curPage == null) {
@@ -532,16 +541,15 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 curPage.writeInt(DataPage.getTupleDataEnd(curPage), nextdbPageNo);
 
             }
-
         }
         else if(DataPage.getFreeSpaceInPage(dbPage) >= 12 &&
-            nextdbPageNo == 0) { 
+            nextdbPageNo == 0) {
             DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
-            int begin_list_pointer = 
+            int begin_list_pointer =
                 headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
-
+            headerpage.unpin();
         }
 
         DataPage.sanityCheck(dbPage);
@@ -569,11 +577,11 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                     headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
+            headerpage.unpin();
         }
-
         DataPage.deleteTuple(dbPage, ptup.getSlot());
         DataPage.sanityCheck(dbPage);
-
+        ptup.unpin();
         // Note that we don't invalidate the page-tuple when it is deleted,
         // so that the tuple can still be unpinned, etc.
     }
