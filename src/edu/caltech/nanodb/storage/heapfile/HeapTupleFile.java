@@ -459,10 +459,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         }
 
         DataPage.sanityCheck(dbPage);
-
-        if (pageTup.isPinned()) {
-            pageTup.unpin();
-        }
         return pageTup;
     }
 
@@ -535,9 +531,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         }
 
         DataPage.sanityCheck(dbPage);
-        if (ptup.isPinned()) {
-            ptup.unpin();
-        }
     }
 
 
@@ -566,9 +559,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         // Note that we don't invalidate the page-tuple when it is deleted,
         // so that the tuple can still be unpinned, etc.
-        if (ptup.isPinned()) {
-            ptup.unpin();
-        }
     }
 
 
