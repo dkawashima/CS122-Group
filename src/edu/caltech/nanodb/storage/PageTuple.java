@@ -481,7 +481,7 @@ public abstract class PageTuple implements Tuple {
      * @param iCol the index of the column to set to <tt>NULL</tt>
      */
     private void setNullColumnValue(int iCol) {
-        /* TODO:  Implement!
+        /*
          *
          * The column's flag in the tuple's null-bitmap must be set to true.
          * Also, the data occupied by the column's value must be removed.
@@ -513,7 +513,7 @@ public abstract class PageTuple implements Tuple {
 
         setNullFlag(iCol, true);
         ColumnType colType = schema.getColumnInfo(iCol).getType();
-
+        // If data type is VARCHAR, determine size of string
         int dataLength = 0;
         if (colType.getBaseType() == SQLDataType.VARCHAR) {
             String strValue = TypeConverter.getStringValue(getColumnValue(iCol));
@@ -524,6 +524,7 @@ public abstract class PageTuple implements Tuple {
 
         deleteTupleDataRange(valueOffsets[iCol], storageSize);
 
+        // Increase offsets for previous columns, page offset after delete
         valueOffsets[iCol] = NULL_OFFSET;
         for (int i = iCol - 1; i >= 0; i--){
             if (valueOffsets[i] != NULL_OFFSET){
@@ -545,7 +546,7 @@ public abstract class PageTuple implements Tuple {
      *
      * @throws IllegalArgumentException if the specified value is {@code null}
      */
-private void setNonNullColumnValue(int iCol, Object value) {
+    private void setNonNullColumnValue(int iCol, Object value) {
         if (value == null)
             throw new IllegalArgumentException("value cannot be null");
 
@@ -594,12 +595,12 @@ private void setNonNullColumnValue(int iCol, Object value) {
         }
 
         int newSize = getStorageSize(colType, newDataLength);
-        boolean nonNullExists = false;
 
         if (valueOffsets[iCol] == NULL_OFFSET){
             /* Look for most recent nonNULL offset and storage size in case of NULL_OFFSET in iCol
            to find correct offset for iCol. If no previous nonNULL offset, then iCol's offset is
            that of the start of the data. */
+            boolean nonNullExists = false;
             for (int i = iCol - 1; i >= 0; i--){
                 if (valueOffsets[i] != NULL_OFFSET){
                     logger.debug(String.format("Found nonNULL column %d, offset %d:", i, valueOffsets[i]));
@@ -610,10 +611,19 @@ private void setNonNullColumnValue(int iCol, Object value) {
                 }
             }
             if (!nonNullExists){
-                valueOffsets[iCol] = getDataStartOffset() + newSize;
+                valueOffsets[iCol] = getDataStartOffset();
+                for (int i = iCol + 1; i < getColumnCount(); i ++){
+                    if (valueOffsets[i] == getDataStartOffset()){
+                        valueOffsets[i] += newSize;
+                        insertTupleDataRange(valueOffsets[iCol] + newSize, newSize);
+                        break;
+                    }
+                }
+            } else {
+                insertTupleDataRange(valueOffsets[iCol], newSize);
+                valueOffsets[iCol] -= newSize;
             }
-            insertTupleDataRange(valueOffsets[iCol], newSize);
-            valueOffsets[iCol] -= newSize;
+
 
         } else {
             /* Adjust offsets if size of data changes */
@@ -632,9 +642,7 @@ private void setNonNullColumnValue(int iCol, Object value) {
                 valueOffsets[i] -= (newSize - oldSize);
             }
         }
-
         pageOffset -= (newSize - oldSize);
-
         logger.debug(String.format("Writing non-null value at column %d, offset %d:", iCol, valueOffsets[iCol]));
         writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
 
@@ -907,4 +915,3 @@ private void setNonNullColumnValue(int iCol, Object value) {
     }
 
 }
-
