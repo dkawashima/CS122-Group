@@ -75,7 +75,7 @@ public class SqlTestCase {
         if (!testBaseDir.exists())
             testBaseDir.mkdirs();
         else
-            FileUtils.cleanDirectory(testBaseDir);
+            //FileUtils.cleanDirectory(testBaseDir);
 
         // Make sure the database server uses the testing base-directory, not
         // the normal base-directory.
@@ -124,13 +124,13 @@ public class SqlTestCase {
         server.shutdown();
 
         // Try to clean up the testing directory.
-        try {
-            FileUtils.cleanDirectory(testBaseDir);
+        /*try {
+            //FileUtils.cleanDirectory(testBaseDir);
         }
         catch (IOException e) {
             System.out.println("Couldn't clean directory " + testBaseDir);
             e.printStackTrace();
-        }
+        }*/
     }
 
 

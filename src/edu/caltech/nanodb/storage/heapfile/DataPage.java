@@ -591,12 +591,12 @@ public class DataPage {
 
         int numSlots = getNumSlots(dbPage);
 
-        logger.debug(String.format("Number of slots before deletion: %d",
-                numSlots));
         if (slot >= numSlots) {
             throw new IllegalArgumentException("Page only has " + numSlots +
                 " slots, but slot " + slot + " was requested for deletion.");
         }
+
+        // Use offset and length to delete space occupied by tuple
         int offset = getSlotValue(dbPage, slot);
         int length = getTupleLength(dbPage, slot);
         logger.debug(String.format("Deleting tuple from slot %d with " +
@@ -608,6 +608,7 @@ public class DataPage {
         deleteTupleDataRange(dbPage, offset, length);
         setSlotValue(dbPage, slot, EMPTY_SLOT);
 
+        // Reclaim empty slots from page by iterating through slots, starting at last slot
         int deletedSlots = 0;
         for (int iSlot = numSlots - 1; iSlot >= 0; iSlot--) {
             if (getSlotValue(dbPage, iSlot) == EMPTY_SLOT) {
@@ -621,7 +622,7 @@ public class DataPage {
             setNumSlots(dbPage, numSlots - deletedSlots);
         }
         int numSlots_after = getNumSlots(dbPage);
-        logger.debug(String.format("Number of slots after deletion: %d",
-                numSlots_after));
+        logger.debug(String.format("Number of slots before deletion: %d, after deletion: %d",
+                numSlots, numSlots_after));
     }
 }
