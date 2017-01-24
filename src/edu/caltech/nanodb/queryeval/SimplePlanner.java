@@ -8,12 +8,20 @@ import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.queryast.FromClause;
 import edu.caltech.nanodb.queryast.SelectClause;
+import edu.caltech.nanodb.queryast.SelectValue;
 
 import edu.caltech.nanodb.expressions.Expression;
+import edu.caltech.nanodb.expressions.FunctionCall;
+import edu.caltech.nanodb.expressions.AggregateExpressionProcessor;
+
+import edu.caltech.nanodb.functions.Function;
+import edu.caltech.nanodb.functions.AggregateFunction;
+import java.util.Map;
 
 import edu.caltech.nanodb.plannodes.FileScanNode;
 import edu.caltech.nanodb.plannodes.PlanNode;
 import edu.caltech.nanodb.plannodes.SelectNode;
+import edu.caltech.nanodb.plannodes.ProjectNode;
 
 import edu.caltech.nanodb.plannodes.SimpleFilterNode;
 import edu.caltech.nanodb.relations.TableInfo;
@@ -55,20 +63,71 @@ public class SimplePlanner extends AbstractPlannerImpl {
             throw new UnsupportedOperationException(
                     "Not implemented:  enclosing queries");
         }
-
-        if (!selClause.isTrivialProject()) {
-            throw new UnsupportedOperationException(
-                    "Not implemented:  project");
+        Map<String, FunctionCall> agg_funct = new Map<String, FunctionCall>();
+        AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
+        for (SelectValue sv : selClause.getSelectValues()) {
+            // Skip select-values that aren't expressions
+            if (!sv.isExpression())
+                continue;
+            Expression e = sv.getExpression();
+            if (e instanceof FunctionCall) {
+                FunctionCall call = (FunctionCall) e;
+                Function f = call.getFunction();
+                if (f instanceof AggregateFunction) {
+                    String key = call.toString();
+                    agg_funct.put(key, call);
+                    Expression new_exp = sv.getExpression().traverse(processor);
+                    sv.setExpression(new_exp);
+                }
+            }
         }
+
+        for (Expression e : selClause.getGroupByExprs()) {
+            if (e instanceof FunctionCall) {
+                FunctionCall call = (FunctionCall) e;
+                String key = call.toString();
+                agg_funct.put(key, call);
+                Expression new_exp = e.traverse(processor);
+                e = new_exp;
+            }
+        }
+
 
         FromClause fromClause = selClause.getFromClause();
-        if (!fromClause.isBaseTable()) {
-            throw new UnsupportedOperationException(
-                    "Not implemented:  joins or subqueries in FROM clause");
+        if (fromClause == null) {
+            ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
+            return projNode;
         }
 
-        return makeSimpleSelect(fromClause.getTableName(),
+        if (fromClause.isBaseTable()) {
+
+            if (!selClause.isTrivialProject()) {
+                TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
+                FileScanNode fileScanNode = new FileScanNode(tableInfo, selClause.getWhereExpr());
+                ProjectNode projNode = new ProjectNode(fileScanNode, selClause.getSelectValues());
+
+                return projNode;
+            } else {
+                return makeSimpleSelect(fromClause.getTableName(),
                 selClause.getWhereExpr(), null);
+            }
+        }
+        if (fromClause.getSelectClause() != null){
+
+                SelectClause fromSelClause = fromClause.getSelectClause();
+                SimpleFilterNode whereNode = new SimpleFilterNode(makePlan(fromSelClause, null),
+                        selClause.getWhereExpr());
+                if (!selClause.isTrivialProject()) {
+                    ProjectNode projNode = new ProjectNode(whereNode,
+                            selClause.getSelectValues());
+                    return projNode;
+                } else {
+                    return whereNode;
+                }
+        }
+            throw new UnsupportedOperationException(
+                    "Not implemented:  joins or subqueries in FROM clause");
+
     }
 
 
