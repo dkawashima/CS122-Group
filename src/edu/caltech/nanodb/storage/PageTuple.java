@@ -550,102 +550,89 @@ public abstract class PageTuple implements Tuple {
         if (value == null)
             throw new IllegalArgumentException("value cannot be null");
 
-        /*
-         *
-         * This time, the column's flag in the tuple's null-bitmap must be set
-         * to false (if it was true before).
-         *
-         * The trick is to figure out the size of the old column-value, and
-         * the size of the new column-value, so that the right amount of space
-         * can be made available for the new value.  If the column is a fixed-
-         * size type (e.g. an INTEGER) then this is easy, but if the column is
-         * a variable-size type (e.g. VARCHAR) then this will be more
-         * involved.  As before, retrieving the column's type will be important
-         * in implementing the method:  schema.getColumnInfo(iCol), and then
-         * schema.getColumnInfo(iCol).getType() to get the basic type info.
-         * You can use the getColumnValueSize() method to determine the size
-         * of a value as well.
-         *
-         * As before, the valueOffsets array is extremely important to use and
-         * modify correctly, so take care in how you manage it.
-         *
-         * The tuple's data in the page starts at the offset returned by the
-         * getDataStartOffset() method; this is the offset past the tuple's
-         * null-bitmask.
-         *
-         * Finally, once you have made space for the new column value, you can
-         * write the value itself using the writeNonNullValue() method.
-         */
-        logger.debug(String.format("Updating column %d:", iCol));
-
-        if (getNullFlag(iCol)) {
-            setNullFlag(iCol, false);
-        }
         ColumnType colType = schema.getColumnInfo(iCol).getType();
 
-        // Find storage size, difference iff string size changes
-        int oldSize = 0;
+        int oldDataSize, newDataSize;
+
+        // This will be the offset of where to store the new non-null value.
+        // However, if the current value is NULL then offset will be set to
+        // NULL_OFFSET, so we need to compute the actual offset for the column
+        // value to be stored at.
+
+        int offset = valueOffsets[iCol];
+        if (offset == NULL_OFFSET) {
+            // The old value was NULL.  Mark that the new value is not!
+            setNullFlag(iCol, false);
+
+            // Find the last column before this one that is not currently NULL.
+            // That column's offset, PLUS its size, will give us the offset of
+            // this column.  (We could also look for the next non-NULL column,
+            // but there may be no more non-NULL columns in the tuple, and we
+            // wouldn't have an easy way of determining the proper offset.)
+
+            int prevCol = iCol - 1;
+            while (prevCol >= 0 && valueOffsets[prevCol] == NULL_OFFSET)
+                prevCol--;
+
+            if (prevCol < 0) {
+                // This value will be added to the front of the tuple's data!
+                offset = getDataStartOffset();
+            }
+            else {
+                // This value will be added after the previous non-NULL value
+                // that we just found.
+                int prevOffset = valueOffsets[prevCol];
+                ColumnType prevType = schema.getColumnInfo(prevCol).getType();
+                offset = prevOffset + getColumnValueSize(prevType, prevOffset);
+            }
+
+            oldDataSize = 0;
+        }
+        else {
+            oldDataSize = getColumnValueSize(colType, offset);
+        }
+
+        // Next, make sure there is space for the new value.  If the column
+        // being written is a variable-size column, we may need to increase or
+        // decrease the size of the tuple to make room.
+
+        // VARCHAR is special - the storage size depends on the size of the
+        // data value being stored.
         int newDataLength = 0;
-        if (colType.getBaseType() == SQLDataType.VARCHAR && valueOffsets[iCol] != NULL_OFFSET ) {
-           /* String oldStrValue = TypeConverter.getStringValue(getColumnValue(iCol));
-            oldDataLength = oldStrValue.length();*/
-            oldSize = getColumnValueSize(colType, valueOffsets[iCol]);
-            String newStrValue = TypeConverter.getStringValue(value);
-            newDataLength = newStrValue.length();
+        if (colType.getBaseType() == SQLDataType.VARCHAR) {
+            String strValue = TypeConverter.getStringValue(value);
+            newDataLength = strValue.length();
+        }
+        newDataSize = getStorageSize(colType, newDataLength);
+
+        int diff = newDataSize - oldDataSize;
+        if (diff != 0) {
+            // The column-value's size is changing, so we need to update
+            // bookkeeping values.
+
+            if (diff > 0)
+                insertTupleDataRange(offset, diff);
+            else
+                deleteTupleDataRange(offset, -diff);
+
+            // Update all affected offsets within this tuple.
+
+            // Where the column-value itself starts
+            offset -= diff;
+            valueOffsets[iCol] = offset;
+
+            // Where the tuple starts in the page
+            pageOffset -= diff;
+
+            // Where various values start in the page
+            for (int jCol = 0; jCol < iCol; jCol++) {
+                if (valueOffsets[jCol] != NULL_OFFSET)
+                    valueOffsets[jCol] -= diff;
+            }
         }
 
-        int newSize = getStorageSize(colType, newDataLength);
-
-        if (valueOffsets[iCol] == NULL_OFFSET){
-            /* Look for most recent nonNULL offset and storage size in case of NULL_OFFSET in iCol
-           to find correct offset for iCol. If no previous nonNULL offset, then iCol's offset is
-           that of the start of the data. */
-            boolean nonNullExists = false;
-            for (int i = iCol - 1; i >= 0; i--){
-                if (valueOffsets[i] != NULL_OFFSET){
-                    logger.debug(String.format("Found nonNULL column %d, offset %d:", i, valueOffsets[i]));
-                    ColumnType colTypePrev = schema.getColumnInfo(i).getType();
-                    valueOffsets[iCol] = valueOffsets[i] + getColumnValueSize(colTypePrev, valueOffsets[i]);
-                    nonNullExists = true;
-                    break;
-                }
-            }
-            if (!nonNullExists){
-                valueOffsets[iCol] = getDataStartOffset();
-                for (int i = iCol + 1; i < getColumnCount(); i ++){
-                    if (valueOffsets[i] == getDataStartOffset()){
-                        valueOffsets[i] += newSize;
-                        insertTupleDataRange(valueOffsets[iCol] + newSize, newSize);
-                        break;
-                    }
-                }
-            } else {
-                insertTupleDataRange(valueOffsets[iCol], newSize);
-                valueOffsets[iCol] -= newSize;
-            }
-
-
-        } else {
-            /* Adjust offsets if size of data changes */
-            if (oldSize - newSize > 0){
-                deleteTupleDataRange(valueOffsets[iCol], oldSize - newSize);
-                valueOffsets[iCol] -= (newSize - oldSize);
-            } else {
-                insertTupleDataRange(valueOffsets[iCol], newSize - oldSize);
-                valueOffsets[iCol] -= (newSize - oldSize);
-            }
-        }
-        // Increase or decrease offsets for previous columns, page offset after update
-        for (int i = iCol - 1; i >= 0; i --){
-            if (valueOffsets[i] != NULL_OFFSET){
-                logger.debug(String.format("Updating offset %d of column %d:", valueOffsets[i], i));
-                valueOffsets[i] -= (newSize - oldSize);
-            }
-        }
-        pageOffset -= (newSize - oldSize);
-        logger.debug(String.format("Writing non-null value at column %d, offset %d:", iCol, valueOffsets[iCol]));
-        writeNonNullValue(dbPage, valueOffsets[iCol], colType, value);
-
+        // Finally, write the value to the column!
+        writeNonNullValue(dbPage, offset, colType, value);
     }
 
 
