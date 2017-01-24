@@ -624,8 +624,7 @@ public abstract class PageTuple implements Tuple {
                 valueOffsets[iCol] -= newSize;
             }
 
-            /*insertTupleDataRange(valueOffsets[iCol], newSize);
-            valueOffsets[iCol] -= newSize; */
+
         } else {
             /* Adjust offsets if size of data changes */
             if (oldSize - newSize > 0){
@@ -916,4 +915,3 @@ public abstract class PageTuple implements Tuple {
     }
 
 }
-

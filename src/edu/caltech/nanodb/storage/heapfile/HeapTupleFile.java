@@ -16,6 +16,10 @@ import edu.caltech.nanodb.queryeval.TableStats;
 import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.relations.Tuple;
 
+import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.relations.ColumnType;
+import edu.caltech.nanodb.relations.SQLDataType;
+
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.FilePointer;
@@ -27,7 +31,32 @@ import edu.caltech.nanodb.storage.TupleFileManager;
 
 
 /**
- * This class implements the TupleFile interface for heap files.
+ * This class implements the TupleFile interface for heap files. The storage
+ * format utilizes a linked list of free blocks. The general structure is as
+ * follows: Each page has a block pointer. A block pointer of -1 indicates that
+ * there is no next node in the linked list. A block pointer of 0 indicates 
+ * that block is not a part of the free block linked list. 
+ *
+ * When a tuple is to be inserted, the linked list is traversed and the tuple
+ * is inserted into the first block with enough space to be found. If no block
+ * is found, a new page is created. 
+ * 
+ * During the add tuple operation, we also check to see if the block is 'full.'
+ * To determine if the block is full, we use the schema, and iterate though the 
+ * columns to see how much space the tuple should take. If the block does not 
+ * have enough space for another tuple, it is considered 'full.' If a block is
+ * full and it is in the linked list, it is taken out of the linked list, 
+ * and its next pointer is set to 0 to indicate that it is out of the list. 
+ * 
+ * During the delete operation, we check if the block now not full, using the
+ * same schema method used for the add tuple operation. If a block is determined
+ * to be not full, and it is not already in the linked list, we add it back to 
+ * the linked list. 
+ * 
+ * During the update operation, we do both checks described above (the checks 
+ * done for add and delete), this is because during an update, a tuple can 
+ * either shrink or grow. Therefore, an update can both cause a full block
+ * to become un-full, and an un-full block to become full. 
  */
 public class HeapTupleFile implements TupleFile {
 
@@ -134,7 +163,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
                     int offset = DataPage.getSlotValue(dbPage, iSlot);
                     if (offset == DataPage.EMPTY_SLOT)
                         continue;
-
+                    else
+                        dbPage.unpin();
                     // This is the first tuple in the file.  Build up the
                     // HeapFilePageTuple object and return it.
                     first = new HeapFilePageTuple(schema, dbPage, iSlot, offset);
@@ -196,6 +226,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
                 " on page " + fptr.getPageNo() + " is empty.");
         }
 
+        if (dbPage.isPinned()) {
+            dbPage.unpin();
+        }
         return new HeapFilePageTuple(schema, dbPage, slot, offset);
     }
 
@@ -203,7 +236,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner one
     /**
      * Returns the tuple that follows the specified tuple, or {@code null} if
      * there are no more tuples in the file.  This method must operate
-     * correctly regardless of whether the input tuple is pinned or unpinned.
+     * correctly regardless of whether the input tuple is pinned or
+     * ned.
      *
      * @param tup the "previous tuple" that specifies where to start looking
      *        for the next tuple
@@ -261,12 +295,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 nextSlot++;
             }
 
+            dbPage.unpin();
             // If we got here then we reached the end of this page with no
             // tuples.  Go on to the next data-page, and start with the first
             // tuple in that page.
 
             try {
-                dbPage.unpin();
                 dbPage = storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
                 nextSlot = 0;
             }
@@ -275,6 +309,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 // scanning.
                 break;
             }
+        }
+        if (dbPage.isPinned()) {
+            dbPage.unpin();
         }
         return nextTup;
     }
@@ -322,9 +359,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         // data file, create a new page.
 
 
-
-
-
         // Load the header page and access the free block linked list pointers. 
         DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
         int begin_list_pointer = 
@@ -333,11 +367,9 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         int pageNo = 0;
         DBPage dbPage = null;
 
-
         // o might not need..... if else.
         if(begin_list_pointer == -1) {
             // make new page
-
 
             pageNo = dbFile.getNumPages();
             logger.debug("Creating new page " + pageNo + " to store new tuple.");
@@ -347,9 +379,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), -1);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
-            
-
-
 
         } 
         else {    
@@ -421,11 +450,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         }
 
-
-
         if (dbPage == null) {
-
-
             // Try to create a new page, and add it to the start of the free
             // block linked list
             pageNo = dbFile.getNumPages();
@@ -435,11 +460,11 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             int old_head = headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
-            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), old_head);
 
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), old_head);
                
         }
-
+        headerpage.unpin();
         int slot = DataPage.allocNewTuple(dbPage, tupSize);
         int tupOffset = DataPage.getSlotValue(dbPage, slot);
 
@@ -450,7 +475,18 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             HeapFilePageTuple.storeNewTuple(schema, dbPage, slot, tupOffset, tup);
 
         // If the dbPage is 'full,' remove it from the free block list
-        if(DataPage.getFreeSpaceInPage(dbPage) < 12) {
+
+        // Get the max space a tuple can take, based on the schema
+        List<ColumnInfo> col_infos = getSchema().getColumnInfos();
+        int calculated_tuple_size = 0;
+        for(ColumnInfo col_info : col_infos) {
+
+            ColumnType col_type = col_info.getType();
+            SQLDataType sqltype =  col_type.getBaseType();
+            calculated_tuple_size += PageTuple.getStorageSize(col_type, 0);
+        }
+
+        if(DataPage.getFreeSpaceInPage(dbPage) < calculated_tuple_size) {
             DBPage prevdbPage = storageManager.loadDBPage(dbFile, 
                 prevPageNo);
             int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
@@ -462,11 +498,12 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 prevdbPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, nextdbPageNo);
             }
 
-
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
+            prevdbPage.unpin();
         }
 
         DataPage.sanityCheck(dbPage);
+        dbPage.unpin();
         return pageTup;
     }
 
@@ -499,15 +536,26 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         DBPage dbPage = ptup.getDBPage();
 
+        // Get the max space a tuple can take, based on the schema
+        List<ColumnInfo> col_infos = getSchema().getColumnInfos();
+        int calculated_tuple_size = 0;
+        for(ColumnInfo col_info : col_infos) {
+
+            ColumnType col_type = col_info.getType();
+            SQLDataType sqltype =  col_type.getBaseType();
+            calculated_tuple_size += PageTuple.getStorageSize(col_type, 0);
+        }
+
         int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
-        if(DataPage.getFreeSpaceInPage(dbPage) < 12 && 
-            nextdbPageNo != 0) { 
+
+        if(DataPage.getFreeSpaceInPage(dbPage) < calculated_tuple_size && 
+            nextdbPageNo != 0) {
 
             // Remove dbpage from list
             DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
-            int begin_list_pointer = 
+            int begin_list_pointer =
                 headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
-            int prevPageNo = 0; 
+            int prevPageNo = 0;
             int pageNo = begin_list_pointer;
             DBPage curPage = null;
 
@@ -522,7 +570,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             //nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
             // A next = 0 indicates that the block is out of the list
-            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0); 
+            dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
 
             // curPage is the header page
             if(curPage == null) {
@@ -532,16 +580,15 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                 curPage.writeInt(DataPage.getTupleDataEnd(curPage), nextdbPageNo);
 
             }
-
         }
-        else if(DataPage.getFreeSpaceInPage(dbPage) >= 12 &&
-            nextdbPageNo == 0) { 
+        else if(DataPage.getFreeSpaceInPage(dbPage) >= calculated_tuple_size &&
+            nextdbPageNo == 0) {
             DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
-            int begin_list_pointer = 
+            int begin_list_pointer =
                 headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
-
+            headerpage.unpin();
         }
 
         DataPage.sanityCheck(dbPage);
@@ -560,8 +607,18 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         DBPage dbPage = ptup.getDBPage();
 
+        // Get the max space a tuple can take, based on the schema
+        List<ColumnInfo> col_infos = getSchema().getColumnInfos();
+        int calculated_tuple_size = 0;
+        for(ColumnInfo col_info : col_infos) {
+
+            ColumnType col_type = col_info.getType();
+            SQLDataType sqltype =  col_type.getBaseType();
+            calculated_tuple_size += PageTuple.getStorageSize(col_type, 0);
+        }
+
         int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
-        if (DataPage.getFreeSpaceInPage(dbPage) >= 12 &&
+        if (DataPage.getFreeSpaceInPage(dbPage) >= calculated_tuple_size &&
                 nextdbPageNo == 0){
             // Add newly free block to free block list.
             DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
@@ -569,11 +626,11 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
                     headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
+            headerpage.unpin();
         }
-
         DataPage.deleteTuple(dbPage, ptup.getSlot());
         DataPage.sanityCheck(dbPage);
-
+        ptup.unpin();
         // Note that we don't invalidate the page-tuple when it is deleted,
         // so that the tuple can still be unpinned, etc.
     }

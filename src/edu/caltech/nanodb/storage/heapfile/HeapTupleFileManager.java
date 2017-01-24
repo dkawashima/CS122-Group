@@ -58,6 +58,7 @@ public class HeapTupleFileManager implements TupleFileManager {
         // end of the free block linked list.
         headerPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, -1);
 
+        headerPage.unpin();
         return tupleFile;
     }
 
