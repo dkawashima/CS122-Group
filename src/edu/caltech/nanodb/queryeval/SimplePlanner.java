@@ -4,6 +4,7 @@ package edu.caltech.nanodb.queryeval;
 import java.io.IOException;
 import java.util.List;
 
+import edu.caltech.nanodb.plannodes.*;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.queryast.FromClause;
@@ -18,12 +19,6 @@ import edu.caltech.nanodb.functions.Function;
 import edu.caltech.nanodb.functions.AggregateFunction;
 import java.util.Map;
 
-import edu.caltech.nanodb.plannodes.FileScanNode;
-import edu.caltech.nanodb.plannodes.PlanNode;
-import edu.caltech.nanodb.plannodes.SelectNode;
-import edu.caltech.nanodb.plannodes.ProjectNode;
-
-import edu.caltech.nanodb.plannodes.SimpleFilterNode;
 import edu.caltech.nanodb.relations.TableInfo;
 
 
@@ -63,35 +58,33 @@ public class SimplePlanner extends AbstractPlannerImpl {
             throw new UnsupportedOperationException(
                     "Not implemented:  enclosing queries");
         }
-        Map<String, FunctionCall> agg_funct = new Map<String, FunctionCall>();
         AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
+        processor.setErrorCheck(1);
+        Expression whereExpr = selClause.getWhereExpr();
+        if (whereExpr != null) {
+            Expression new_exp = whereExpr.traverse(processor);
+        }
+
+        Expression onExpr = selClause.getFromClause().getOnExpression();
+        if (onExpr != null) {
+            Expression new_exp = onExpr.traverse(processor);
+        }
+
+        processor.setErrorCheck(0);
         for (SelectValue sv : selClause.getSelectValues()) {
             // Skip select-values that aren't expressions
             if (!sv.isExpression())
                 continue;
             Expression e = sv.getExpression();
-            if (e instanceof FunctionCall) {
-                FunctionCall call = (FunctionCall) e;
-                Function f = call.getFunction();
-                if (f instanceof AggregateFunction) {
-                    String key = call.toString();
-                    agg_funct.put(key, call);
-                    Expression new_exp = sv.getExpression().traverse(processor);
-                    sv.setExpression(new_exp);
-                }
-            }
-        }
+            Expression new_exp = sv.getExpression().traverse(processor);
+            sv.setExpression(new_exp);
 
-        for (Expression e : selClause.getGroupByExprs()) {
-            if (e instanceof FunctionCall) {
-                FunctionCall call = (FunctionCall) e;
-                String key = call.toString();
-                agg_funct.put(key, call);
-                Expression new_exp = e.traverse(processor);
-                e = new_exp;
-            }
         }
-
+        Expression havingExpr = selClause.getHavingExpr();
+        if (havingExpr != null) {
+            Expression new_exp = havingExpr.traverse(processor);
+            selClause.setHavingExpr(new_exp);
+        }
 
         FromClause fromClause = selClause.getFromClause();
         if (fromClause == null) {
@@ -104,12 +97,29 @@ public class SimplePlanner extends AbstractPlannerImpl {
             if (!selClause.isTrivialProject()) {
                 TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
                 FileScanNode fileScanNode = new FileScanNode(tableInfo, selClause.getWhereExpr());
-                ProjectNode projNode = new ProjectNode(fileScanNode, selClause.getSelectValues());
-
+                ProjectNode projNode;
+                if (processor.getAggFunct() != null) {
+                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(fileScanNode,
+                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                }
+                else {
+                    projNode = new ProjectNode(fileScanNode, selClause.getSelectValues());
+                }
                 return projNode;
             } else {
-                return makeSimpleSelect(fromClause.getTableName(),
-                selClause.getWhereExpr(), null);
+                SelectNode selectNode = makeSimpleSelect(fromClause.getTableName(),
+                        selClause.getWhereExpr(), null);
+                if (processor.getAggFunct() != null) {
+                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(selectNode,
+                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    if(selClause.getHavingExpr() != null) {
+                        SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                        return havingNode;
+                    }
+                    return aggregateNode;
+                }
+                return selectNode;
             }
         }
         if (fromClause.getSelectClause() != null){
@@ -118,10 +128,27 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 SimpleFilterNode whereNode = new SimpleFilterNode(makePlan(fromSelClause, null),
                         selClause.getWhereExpr());
                 if (!selClause.isTrivialProject()) {
-                    ProjectNode projNode = new ProjectNode(whereNode,
-                            selClause.getSelectValues());
+                    ProjectNode projNode;
+                    if (processor.getAggFunct() != null) {
+                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                    }
+                    else {
+                        projNode = new ProjectNode(whereNode, selClause.getSelectValues());
+                    }
                     return projNode;
                 } else {
+                    if (processor.getAggFunct() != null) {
+                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        if(selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
+                                    selClause.getHavingExpr());
+                            return havingNode;
+                        }
+                        return aggregateNode;
+                    }
                     return whereNode;
                 }
         }
