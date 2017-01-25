@@ -35,6 +35,48 @@ public class SimplePlanner extends AbstractPlannerImpl {
     private static Logger logger = Logger.getLogger(SimplePlanner.class);
 
 
+    private NestedLoopJoinNode makeJoinPlan(FromClause fromClause) throws IOException {
+        if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR
+                && fromClause.getRightChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR) {
+            return new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
+                    makeJoinPlan(fromClause.getRightChild()), fromClause.getJoinType(),
+                    fromClause.getOnExpression());
+        } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR
+                && fromClause.getRightChild().getClauseType() != FromClause.ClauseType.JOIN_EXPR) {
+            if (fromClause.getRightChild().getClauseType() == FromClause.ClauseType.BASE_TABLE) {
+                TableInfo tableInfo = storageManager.getTableManager()
+                        .openTable(fromClause.getRightChild().getTableName());
+                FileScanNode fileScanNode = new FileScanNode(tableInfo, null);
+                return new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
+                        fileScanNode, fromClause.getJoinType(),
+                        fromClause.getOnExpression());
+
+            }
+        } else if (fromClause.getLeftChild().getClauseType() != FromClause.ClauseType.JOIN_EXPR
+                && fromClause.getRightChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR){
+            if (fromClause.getRightChild().getClauseType() == FromClause.ClauseType.BASE_TABLE) {
+                TableInfo tableInfo = storageManager.getTableManager()
+                        .openTable(fromClause.getLeftChild().getTableName());
+                FileScanNode fileScanNode = new FileScanNode(tableInfo, null);
+                return new NestedLoopJoinNode(fileScanNode, makeJoinPlan(fromClause.getRightChild()),
+                        fromClause.getJoinType(),
+                        fromClause.getOnExpression());
+            }
+        } else { // Both not join_expressions
+            TableInfo tableInfoL = storageManager.getTableManager()
+                    .openTable(fromClause.getLeftChild().getTableName());
+            TableInfo tableInfoR = storageManager.getTableManager()
+                    .openTable(fromClause.getRightChild().getTableName());
+            FileScanNode fileScanNodeL = new FileScanNode(tableInfoL, null);
+            FileScanNode fileScanNodeR = new FileScanNode(tableInfoR, null);
+            return new NestedLoopJoinNode(fileScanNodeL, fileScanNodeR,
+                    fromClause.getJoinType(),
+                    fromClause.getOnExpression());
+            }
+        return null;
+    }
+
+
     /**
      * Returns the root of a plan tree suitable for executing the specified
      * query.
@@ -90,6 +132,35 @@ public class SimplePlanner extends AbstractPlannerImpl {
         if (fromClause == null) {
             ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
             return projNode;
+        }
+        if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
+            NestedLoopJoinNode joinNode = makeJoinPlan(fromClause);
+            if (!selClause.isTrivialProject()) {
+                TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
+                ProjectNode projNode;
+                if (processor.getAggFunct() != null) {
+                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(joinNode,
+                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                }
+                else {
+                    projNode = new ProjectNode(joinNode, selClause.getSelectValues());
+                }
+                return projNode;
+            } else {
+                SimpleFilterNode whereNode = new SimpleFilterNode(joinNode,
+                        selClause.getWhereExpr());
+                if (processor.getAggFunct() != null) {
+                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
+                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    if(selClause.getHavingExpr() != null) {
+                        SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                        return havingNode;
+                    }
+                    return aggregateNode;
+                }
+                return whereNode;
+            }
         }
 
         if (fromClause.isBaseTable()) {

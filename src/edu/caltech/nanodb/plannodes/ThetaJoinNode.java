@@ -97,19 +97,21 @@ public abstract class ThetaJoinNode extends PlanNode {
     protected Tuple joinTuples(Tuple left, Tuple right) {
 
         // TODO:  Extend this to support semi-join and anti-join.
-        if (joinType == JoinType.SEMIJOIN || joinType == JoinType.ANTIJOIN)
-            throw new UnsupportedOperationException("Not yet implemented!");
 
         TupleLiteral joinedTuple = new TupleLiteral();
         // appendTuple() also copies schema information from the source tuples.
 
         if (!schemaSwapped) {
             joinedTuple.appendTuple(left);
-            joinedTuple.appendTuple(right);
+            if (joinType != JoinType.ANTIJOIN && joinType != JoinType.SEMIJOIN) {
+                joinedTuple.appendTuple(right);
+            }
         }
         else {
             joinedTuple.appendTuple(right);
-            joinedTuple.appendTuple(left);
+            if (joinType != JoinType.ANTIJOIN && joinType != JoinType.SEMIJOIN) {
+                joinedTuple.appendTuple(left);
+            }
         }
 
         return joinedTuple;
