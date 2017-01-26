@@ -2,6 +2,7 @@ package edu.caltech.nanodb.queryeval;
 
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 
 import edu.caltech.nanodb.plannodes.*;
@@ -254,8 +255,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode;
                 if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(joinNode,
-                            selClause.getGroupByExprs(), processor.getAggFunct());
+                    HashedGroupAggregateNode aggregateNode;
+                    if (processor.getAggFunct() == null){
+                        HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                        aggregateNode = new HashedGroupAggregateNode(joinNode,
+                                selClause.getGroupByExprs(),empty_agg);
+                    } else {
+                        aggregateNode = new HashedGroupAggregateNode(joinNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                    }
                     aggregateNode.prepare();
                     if(selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
@@ -275,8 +283,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         selClause.getWhereExpr());
                 whereNode.prepare();
                 if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
-                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    HashedGroupAggregateNode aggregateNode;
+                    if (processor.getAggFunct() == null){
+                        HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                        aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                selClause.getGroupByExprs(),empty_agg);
+                    } else {
+                        aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                    }
                     aggregateNode.prepare();
                     if (selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
@@ -300,8 +315,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     RenameNode renameNode = new RenameNode(fileScanNode, fromClause.getResultName());
                     renameNode.prepare();
                     if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(renameNode,
-                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null){
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(renameNode,
+                                    selClause.getGroupByExprs(),empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(renameNode,
+                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                        }
                         aggregateNode.prepare();
                         if(selClause.getHavingExpr() != null) {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
@@ -317,8 +339,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 } else {
                     if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
 
-                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(fileScanNode,
-                                selClause.getGroupByExprs(), processor.getAggFunct());
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null){
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(fileScanNode,
+                                    selClause.getGroupByExprs(),empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(fileScanNode,
+                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                        }
                         aggregateNode.prepare();
                         if (selClause.getHavingExpr() != null) {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
@@ -338,8 +367,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 SelectNode selectNode = makeSimpleSelect(fromClause.getTableName(),
                         selClause.getWhereExpr(), null);
                 if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(selectNode,
-                            selClause.getGroupByExprs(),processor.getAggFunct());
+                    HashedGroupAggregateNode aggregateNode;
+                    if (processor.getAggFunct() == null){
+                        HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                        aggregateNode = new HashedGroupAggregateNode(selectNode,
+                                selClause.getGroupByExprs(),empty_agg);
+                    } else {
+                        aggregateNode = new HashedGroupAggregateNode(selectNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                    }
                     aggregateNode.prepare();
                     if(selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
@@ -363,8 +399,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 if (!selClause.isTrivialProject()) {
                     ProjectNode projNode;
                     if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
-                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null){
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                    selClause.getGroupByExprs(),empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                        }
                         aggregateNode.prepare();
                         if(selClause.getHavingExpr() != null) {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
@@ -382,8 +425,15 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     return projNode;
                 } else {
                     if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
-                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
-                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null){
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                    selClause.getGroupByExprs(),empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(whereNode,
+                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                        }
                         aggregateNode.prepare();
                         if(selClause.getHavingExpr() != null) {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
