@@ -279,6 +279,8 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 projNode.prepare();
                 return projNode;
             } else {
+                if (selClause.getWhereExpr() == null)
+                    return joinNode;
                 SimpleFilterNode whereNode = new SimpleFilterNode(joinNode,
                         selClause.getWhereExpr());
                 whereNode.prepare();
@@ -297,7 +299,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
                         havingNode.prepare();
                         return havingNode;
-                    }
+                }
                     return aggregateNode;
                 }
                 return whereNode;
