@@ -249,7 +249,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
             projNode.prepare();
             return projNode;
         }
-        if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
+        else if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
             PlanNode joinNode = makeJoinPlan(fromClause);
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode;
@@ -289,7 +289,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
             }
         }
 
-        if (fromClause.isBaseTable()) {
+        if (fromClause != null && fromClause.isBaseTable()) {
 
             if (!selClause.isTrivialProject()) {
                 TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
@@ -351,7 +351,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 return selectNode;
             }
         }
-        if (fromClause.getSelectClause() != null){
+        if (fromClause != null && fromClause.getSelectClause() != null){
 
                 SelectClause fromSelClause = fromClause.getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
