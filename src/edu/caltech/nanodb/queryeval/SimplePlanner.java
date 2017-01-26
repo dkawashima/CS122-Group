@@ -61,7 +61,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
 
                 SelectClause fromSelClause = fromClause.getRightChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
-                        fromClause.getResultName());
+                        fromClause.getRightChild().getResultName());
                 fromSelNode.prepare();
                 finalNestNode = new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
                         fromSelNode, fromClause.getJoinType(),
@@ -84,7 +84,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
 
                 SelectClause fromSelClause = fromClause.getLeftChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
-                        fromClause.getResultName());
+                        fromClause.getLeftChild().getResultName());
                 fromSelNode.prepare();
                 finalNestNode = new NestedLoopJoinNode(fromSelNode, makeJoinPlan(fromClause.getRightChild()),
                         fromClause.getJoinType(), fromClause.getComputedJoinExpr());
@@ -132,7 +132,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         .openTable(fromClause.getLeftChild().getTableName());
                 SelectClause fromSelClause = fromClause.getRightChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
-                        fromClause.getResultName());
+                        fromClause.getRightChild().getResultName());
                 fromSelNode.prepare();
                 FileScanNode fileScanNodeL = new FileScanNode(tableInfoL, null);
                 fileScanNodeL.prepare();
@@ -150,7 +150,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.BASE_TABLE){
                 SelectClause fromSelClause = fromClause.getLeftChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
-                        fromClause.getResultName());
+                        fromClause.getLeftChild().getResultName());
                 fromSelNode.prepare();
                 TableInfo tableInfoR = storageManager.getTableManager()
                         .openTable(fromClause.getRightChild().getTableName());
@@ -170,11 +170,11 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
                 SelectClause fromSelClauseL = fromClause.getLeftChild().getSelectClause();
                 RenameNode fromSelNodeL = new RenameNode(makePlan(fromSelClauseL, null),
-                        fromClause.getResultName());
+                        fromClause.getLeftChild().getResultName());
                 fromSelNodeL.prepare();
                 SelectClause fromSelClauseR = fromClause.getRightChild().getSelectClause();
                 RenameNode fromSelNodeR = new RenameNode(makePlan(fromSelClauseR, null),
-                        fromClause.getResultName());
+                        fromClause.getRightChild().getResultName());
                 fromSelNodeR.prepare();
                 finalNestNode = new NestedLoopJoinNode(fromSelNodeL, fromSelNodeR,
                         fromClause.getJoinType(),
