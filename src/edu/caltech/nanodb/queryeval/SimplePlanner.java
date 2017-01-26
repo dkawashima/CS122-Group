@@ -35,13 +35,14 @@ public class SimplePlanner extends AbstractPlannerImpl {
     private static Logger logger = Logger.getLogger(SimplePlanner.class);
 
 
-    private NestedLoopJoinNode makeJoinPlan(FromClause fromClause) throws IOException {
+    private PlanNode makeJoinPlan(FromClause fromClause) throws IOException {
+        NestedLoopJoinNode finalNestNode = null;
         if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR
                 && fromClause.getRightChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR) {
 
-            return new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
+            finalNestNode = new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
                     makeJoinPlan(fromClause.getRightChild()), fromClause.getJoinType(),
-                    fromClause.getOnExpression());
+                    fromClause.getComputedJoinExpr());
         } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.JOIN_EXPR
                 && fromClause.getRightChild().getClauseType() != FromClause.ClauseType.JOIN_EXPR) {
 
@@ -49,9 +50,9 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 TableInfo tableInfo = storageManager.getTableManager()
                         .openTable(fromClause.getRightChild().getTableName());
                 FileScanNode fileScanNode = new FileScanNode(tableInfo, null);
-                return new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
+                finalNestNode = new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
                         fileScanNode, fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
 
             }
             if (fromClause.getRightChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
@@ -59,9 +60,9 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 SelectClause fromSelClause = fromClause.getRightChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
                         fromClause.getResultName());
-                return new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
+                finalNestNode = new NestedLoopJoinNode(makeJoinPlan(fromClause.getLeftChild()),
                         fromSelNode, fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
 
             }
         } else if (fromClause.getLeftChild().getClauseType() != FromClause.ClauseType.JOIN_EXPR
@@ -71,17 +72,17 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 TableInfo tableInfo = storageManager.getTableManager()
                         .openTable(fromClause.getLeftChild().getTableName());
                 FileScanNode fileScanNode = new FileScanNode(tableInfo, null);
-                return new NestedLoopJoinNode(fileScanNode, makeJoinPlan(fromClause.getRightChild()),
+                finalNestNode = new NestedLoopJoinNode(fileScanNode, makeJoinPlan(fromClause.getRightChild()),
                         fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
             }
             if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
 
                 SelectClause fromSelClause = fromClause.getLeftChild().getSelectClause();
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
                         fromClause.getResultName());
-                return new NestedLoopJoinNode(fromSelNode, makeJoinPlan(fromClause.getRightChild()),
-                        fromClause.getJoinType(), fromClause.getOnExpression());
+                finalNestNode = new NestedLoopJoinNode(fromSelNode, makeJoinPlan(fromClause.getRightChild()),
+                        fromClause.getJoinType(), fromClause.getComputedJoinExpr()));
 
             }
         } else { // Both not join_expressions
@@ -96,23 +97,23 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 if (fromClause.getRightChild().isRenamed() && fromClause.getLeftChild().isRenamed()){
                     RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
                     RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
-                    return new NestedLoopJoinNode(renameNodeL, renameNodeR,
+                    finalNestNode = new NestedLoopJoinNode(renameNodeL, renameNodeR,
                             fromClause.getJoinType(),
-                            fromClause.getOnExpression());
+                            fromClause.getComputedJoinExpr());
                 } else if (fromClause.getRightChild().isRenamed() && !fromClause.getLeftChild().isRenamed()){
                     RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
-                    return new NestedLoopJoinNode(fileScanNodeL, renameNodeR,
+                    finalNestNode = new NestedLoopJoinNode(fileScanNodeL, renameNodeR,
                             fromClause.getJoinType(),
-                            fromClause.getOnExpression());
+                            fromClause.getComputedJoinExpr());
                 } else if (fromClause.getLeftChild().isRenamed() && !fromClause.getRightChild().isRenamed()){
                     RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
-                    return new NestedLoopJoinNode(renameNodeL, fileScanNodeR,
+                    finalNestNode = new NestedLoopJoinNode(renameNodeL, fileScanNodeR,
                             fromClause.getJoinType(),
-                            fromClause.getOnExpression());
+                            fromClause.getComputedJoinExpr());
                 }
-                return new NestedLoopJoinNode(fileScanNodeL, fileScanNodeR,
+                finalNestNode = new NestedLoopJoinNode(fileScanNodeL, fileScanNodeR,
                         fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
 
             } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.BASE_TABLE &&
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
@@ -124,13 +125,13 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 FileScanNode fileScanNodeL = new FileScanNode(tableInfoL, null);
                 if (fromClause.getLeftChild().isRenamed()){
                     RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
-                    return new NestedLoopJoinNode(renameNodeL, fromSelNode,
+                    finalNestNode = new NestedLoopJoinNode(renameNodeL, fromSelNode,
                             fromClause.getJoinType(),
-                            fromClause.getOnExpression());
+                            fromClause.getComputedJoinExpr());
                 }
-                return new NestedLoopJoinNode(fileScanNodeL, fromSelNode,
+                finalNestNode = new NestedLoopJoinNode(fileScanNodeL, fromSelNode,
                         fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
             } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY &&
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.BASE_TABLE){
                 SelectClause fromSelClause = fromClause.getLeftChild().getSelectClause();
@@ -141,13 +142,13 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 FileScanNode fileScanNodeR = new FileScanNode(tableInfoR, null);
                 if (fromClause.getRightChild().isRenamed()){
                     RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
-                    return new NestedLoopJoinNode(fromSelNode, renameNodeR,
+                    finalNestNode = new NestedLoopJoinNode(fromSelNode, renameNodeR,
                             fromClause.getJoinType(),
-                            fromClause.getOnExpression());
+                            fromClause.getComputedJoinExpr());
                 }
-                return new NestedLoopJoinNode(fromSelNode, fileScanNodeR,
+                finalNestNode = new NestedLoopJoinNode(fromSelNode, fileScanNodeR,
                         fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
             } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY &&
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
                 SelectClause fromSelClauseL = fromClause.getLeftChild().getSelectClause();
@@ -156,12 +157,16 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 SelectClause fromSelClauseR = fromClause.getRightChild().getSelectClause();
                 RenameNode fromSelNodeR = new RenameNode(makePlan(fromSelClauseR, null),
                         fromClause.getResultName());
-                return new NestedLoopJoinNode(fromSelNodeL, fromSelNodeR,
+                finalNestNode = new NestedLoopJoinNode(fromSelNodeL, fromSelNodeR,
                         fromClause.getJoinType(),
-                        fromClause.getOnExpression());
+                        fromClause.getComputedJoinExpr());
             }
             }
-        return null;
+        if (fromClause.getConditionType() == FromClause.JoinConditionType.JOIN_USING ||
+                fromClause.getConditionType() == FromClause.JoinConditionType.NATURAL_JOIN){
+            return new ProjectNode(finalNestNode, fromClause.getComputedSelectValues());
+        }
+        return finalNestNode;
     }
 
 
@@ -223,6 +228,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
         }
         if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
             NestedLoopJoinNode joinNode = makeJoinPlan(fromClause);
+
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode;
                 if (processor.getAggFunct() != null) {
