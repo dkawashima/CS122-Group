@@ -4,6 +4,7 @@ package edu.caltech.nanodb.plannodes;
 import java.io.IOException;
 import java.util.List;
 
+import edu.caltech.nanodb.expressions.TupleLiteral;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.Expression;
@@ -13,6 +14,10 @@ import edu.caltech.nanodb.queryeval.PlanCost;
 import edu.caltech.nanodb.queryeval.SelectivityEstimator;
 import edu.caltech.nanodb.relations.JoinType;
 import edu.caltech.nanodb.relations.Tuple;
+import edu.caltech.nanodb.plannodes.PlanNode;
+
+import edu.caltech.nanodb.queryast.FromClause;
+import edu.caltech.nanodb.relations.Schema;
 
 import java.util.ArrayList;
 
@@ -36,11 +41,17 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
     /** Set to true when we have exhausted all tuples from our subplans. */
     private boolean done;
 
+    private boolean break_val = false;
+
+    private boolean matched = false;
 
     public NestedLoopJoinNode(PlanNode leftChild, PlanNode rightChild,
                 JoinType joinType, Expression predicate) {
 
         super(leftChild, rightChild, joinType, predicate);
+        if (joinType == JoinType.RIGHT_OUTER){
+            this.swap();
+        }
     }
 
 
@@ -183,8 +194,16 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            if (canJoinTuples())
+            if (canJoinTuples()) {
+                if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
+                        || joinType == JoinType.ANTIJOIN) {
+                    matched = true;
+                }
+                if (joinType == JoinType.SEMIJOIN || joinType == JoinType.ANTIJOIN) {
+                    break_val = true;
+                }
                 return joinTuples(leftTuple, rightTuple);
+            }
         }
 
         return null;
@@ -199,8 +218,35 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
      *         {@code false} if no more pairs of tuples are available to join.
      */
     private boolean getTuplesToJoin() throws IOException {
-        // TODO:  Implement
-        return false;
+        if (break_val && joinType == JoinType.SEMIJOIN){
+            rightChild.initialize();
+            leftTuple = leftChild.getNextTuple();
+            break_val = false;
+        }
+        if (leftChild.getNextTuple() == null){
+            done = true;
+            if (schemaSwapped){
+                this.swap();
+            }
+            return false;
+
+        }
+        if (rightChild.getNextTuple() == null){
+            if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)){
+                Schema result;
+                /*TupleLiteral(leftTuple.getColumnCount());
+                buildJoinSchema('Finding NULL pad num of values: ', leftSchema, rightSchema,
+                        leftSchema.getCommonColumnNames(rightSchema)), result); */
+            } else
+                if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
+                    || joinType == JoinType.ANTIJOIN)){
+                matched = false;
+            }
+            rightChild.initialize();
+            leftTuple = leftChild.getNextTuple();
+        }
+
+        return true;
     }
 
 

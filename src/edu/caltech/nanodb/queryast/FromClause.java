@@ -893,6 +893,7 @@ public class FromClause {
                         new ColumnValue(rhsColInfo.getColumnName()));
                     selVal = new SelectValue(coalesce, name);
                     computedSelectValues.add(selVal);
+                    break;
                 }
             }
 
