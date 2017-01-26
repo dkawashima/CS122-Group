@@ -93,9 +93,27 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         .openTable(fromClause.getRightChild().getTableName());
                 FileScanNode fileScanNodeL = new FileScanNode(tableInfoL, null);
                 FileScanNode fileScanNodeR = new FileScanNode(tableInfoR, null);
+                if (fromClause.getRightChild().isRenamed() && fromClause.getLeftChild().isRenamed()){
+                    RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
+                    RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
+                    return new NestedLoopJoinNode(renameNodeL, renameNodeR,
+                            fromClause.getJoinType(),
+                            fromClause.getOnExpression());
+                } else if (fromClause.getRightChild().isRenamed() && !fromClause.getLeftChild().isRenamed()){
+                    RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
+                    return new NestedLoopJoinNode(fileScanNodeL, renameNodeR,
+                            fromClause.getJoinType(),
+                            fromClause.getOnExpression());
+                } else if (fromClause.getLeftChild().isRenamed() && !fromClause.getRightChild().isRenamed()){
+                    RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
+                    return new NestedLoopJoinNode(renameNodeL, fileScanNodeR,
+                            fromClause.getJoinType(),
+                            fromClause.getOnExpression());
+                }
                 return new NestedLoopJoinNode(fileScanNodeL, fileScanNodeR,
                         fromClause.getJoinType(),
                         fromClause.getOnExpression());
+
             } else if (fromClause.getLeftChild().getClauseType() == FromClause.ClauseType.BASE_TABLE &&
                     fromClause.getRightChild().getClauseType() == FromClause.ClauseType.SELECT_SUBQUERY){
                 TableInfo tableInfoL = storageManager.getTableManager()
@@ -104,6 +122,12 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
                         fromClause.getResultName());
                 FileScanNode fileScanNodeL = new FileScanNode(tableInfoL, null);
+                if (fromClause.getLeftChild().isRenamed()){
+                    RenameNode renameNodeL = new RenameNode(fileScanNodeL, fromClause.getLeftChild().getResultName());
+                    return new NestedLoopJoinNode(renameNodeL, fromSelNode,
+                            fromClause.getJoinType(),
+                            fromClause.getOnExpression());
+                }
                 return new NestedLoopJoinNode(fileScanNodeL, fromSelNode,
                         fromClause.getJoinType(),
                         fromClause.getOnExpression());
@@ -115,6 +139,12 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 TableInfo tableInfoR = storageManager.getTableManager()
                         .openTable(fromClause.getRightChild().getTableName());
                 FileScanNode fileScanNodeR = new FileScanNode(tableInfoR, null);
+                if (fromClause.getRightChild().isRenamed()){
+                    RenameNode renameNodeR = new RenameNode(fileScanNodeR, fromClause.getRightChild().getResultName());
+                    return new NestedLoopJoinNode(fromSelNode, renameNodeR,
+                            fromClause.getJoinType(),
+                            fromClause.getOnExpression());
+                }
                 return new NestedLoopJoinNode(fromSelNode, fileScanNodeR,
                         fromClause.getJoinType(),
                         fromClause.getOnExpression());
@@ -194,12 +224,16 @@ public class SimplePlanner extends AbstractPlannerImpl {
         if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
             NestedLoopJoinNode joinNode = makeJoinPlan(fromClause);
             if (!selClause.isTrivialProject()) {
-                TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
                 ProjectNode projNode;
                 if (processor.getAggFunct() != null) {
                     HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(joinNode,
                             selClause.getGroupByExprs(),processor.getAggFunct());
-                    projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                    if(selClause.getHavingExpr() != null) {
+                        SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                        projNode = new ProjectNode(havingNode, selClause.getSelectValues());
+                    } else {
+                        projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                    }
                 }
                 else {
                     projNode = new ProjectNode(joinNode, selClause.getSelectValues());
@@ -211,7 +245,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 if (processor.getAggFunct() != null) {
                     HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
                             selClause.getGroupByExprs(),processor.getAggFunct());
-                    if(selClause.getHavingExpr() != null) {
+                    if (selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
                         return havingNode;
                     }
@@ -226,14 +260,33 @@ public class SimplePlanner extends AbstractPlannerImpl {
             if (!selClause.isTrivialProject()) {
                 TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
                 FileScanNode fileScanNode = new FileScanNode(tableInfo, selClause.getWhereExpr());
-                ProjectNode projNode;
-                if (processor.getAggFunct() != null) {
-                    HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(fileScanNode,
-                            selClause.getGroupByExprs(),processor.getAggFunct());
-                    projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
-                }
-                else {
-                    projNode = new ProjectNode(fileScanNode, selClause.getSelectValues());
+                ProjectNode projNode = null;
+                if (fromClause.isRenamed()){
+                    RenameNode renameNode = new RenameNode(fileScanNode, fromClause.getResultName());
+                    if (processor.getAggFunct() != null) {
+                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(renameNode,
+                                selClause.getGroupByExprs(),processor.getAggFunct());
+                        if(selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                            projNode = new ProjectNode(havingNode, selClause.getSelectValues());
+                        } else {
+                            projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                        }
+                    }
+                } else {
+                    if (processor.getAggFunct() != null) {
+
+                        HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(fileScanNode,
+                                selClause.getGroupByExprs(), processor.getAggFunct());
+                        if (selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                            projNode = new ProjectNode(havingNode, selClause.getSelectValues());
+                        } else {
+                            projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                        }
+                    } else {
+                        projNode = new ProjectNode(fileScanNode, selClause.getSelectValues());
+                    }
                 }
                 return projNode;
             } else {
@@ -263,7 +316,12 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     if (processor.getAggFunct() != null) {
                         HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
                                 selClause.getGroupByExprs(),processor.getAggFunct());
-                        projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                        if(selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                            projNode = new ProjectNode(havingNode, selClause.getSelectValues());
+                        } else {
+                            projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                        }
                     }
                     else {
                         projNode = new ProjectNode(whereNode, selClause.getSelectValues());
