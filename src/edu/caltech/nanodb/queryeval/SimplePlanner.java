@@ -441,9 +441,11 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 RenameNode fromSelNode = new RenameNode(makePlan(fromSelClause, null),
                         fromClause.getResultName());
                 fromSelNode.prepare();
+            if (selClause.getWhereExpr() != null) {
                 SimpleFilterNode whereNode = new SimpleFilterNode(fromSelNode,
                         selClause.getWhereExpr());
                 whereNode.prepare();
+
                 if (!selClause.isTrivialProject()) {
                     ProjectNode projNode;
                     if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
@@ -479,20 +481,20 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 } else {
                     if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
                         HashedGroupAggregateNode aggregateNode;
-                        if (processor.getAggFunct() == null){
+                        if (processor.getAggFunct() == null) {
                             HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
                             aggregateNode = new HashedGroupAggregateNode(whereNode,
-                                    selClause.getGroupByExprs(),empty_agg);
+                                    selClause.getGroupByExprs(), empty_agg);
                         } else {
                             aggregateNode = new HashedGroupAggregateNode(whereNode,
-                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                                    selClause.getGroupByExprs(), processor.getAggFunct());
                         }
                         aggregateNode.prepare();
-                        if(selClause.getHavingExpr() != null) {
+                        if (selClause.getHavingExpr() != null) {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
                                     selClause.getHavingExpr());
                             havingNode.prepare();
-                            if (!selClause.getOrderByExprs().isEmpty()){
+                            if (!selClause.getOrderByExprs().isEmpty()) {
                                 SortNode orderByNode = new SortNode(havingNode, selClause.getOrderByExprs());
                                 orderByNode.prepare();
                                 return orderByNode;
@@ -500,20 +502,92 @@ public class SimplePlanner extends AbstractPlannerImpl {
 
                             return havingNode;
                         }
-                        if (!selClause.getOrderByExprs().isEmpty()){
+                        if (!selClause.getOrderByExprs().isEmpty()) {
                             SortNode orderByNode = new SortNode(aggregateNode, selClause.getOrderByExprs());
                             orderByNode.prepare();
                             return orderByNode;
                         }
                         return aggregateNode;
                     }
-                    if (!selClause.getOrderByExprs().isEmpty()){
+                    if (!selClause.getOrderByExprs().isEmpty()) {
                         SortNode orderByNode = new SortNode(whereNode, selClause.getOrderByExprs());
                         orderByNode.prepare();
                         return orderByNode;
                     }
                     return whereNode;
+                    }
+                } else {
+                if (!selClause.isTrivialProject()) {
+                    ProjectNode projNode;
+                    if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null){
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(fromSelNode,
+                                    selClause.getGroupByExprs(),empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(fromSelNode,
+                                    selClause.getGroupByExprs(),processor.getAggFunct());
+                        }
+                        aggregateNode.prepare();
+                        if(selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
+                                    selClause.getHavingExpr());
+                            havingNode.prepare();
+                            projNode = new ProjectNode(havingNode, selClause.getSelectValues());
+                        } else {
+                            projNode = new ProjectNode(aggregateNode, selClause.getSelectValues());
+                        }
+                    }
+                    else {
+                        projNode = new ProjectNode(fromSelNode, selClause.getSelectValues());
+                    }
+                    projNode.prepare();
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
+                    return projNode;
+                } else {
+                    if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
+                        HashedGroupAggregateNode aggregateNode;
+                        if (processor.getAggFunct() == null) {
+                            HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                            aggregateNode = new HashedGroupAggregateNode(fromSelNode,
+                                    selClause.getGroupByExprs(), empty_agg);
+                        } else {
+                            aggregateNode = new HashedGroupAggregateNode(fromSelNode,
+                                    selClause.getGroupByExprs(), processor.getAggFunct());
+                        }
+                        aggregateNode.prepare();
+                        if (selClause.getHavingExpr() != null) {
+                            SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
+                                    selClause.getHavingExpr());
+                            havingNode.prepare();
+                            if (!selClause.getOrderByExprs().isEmpty()) {
+                                SortNode orderByNode = new SortNode(havingNode, selClause.getOrderByExprs());
+                                orderByNode.prepare();
+                                return orderByNode;
+                            }
+
+                            return havingNode;
+                        }
+                        if (!selClause.getOrderByExprs().isEmpty()) {
+                            SortNode orderByNode = new SortNode(aggregateNode, selClause.getOrderByExprs());
+                            orderByNode.prepare();
+                            return orderByNode;
+                        }
+                        return aggregateNode;
+                    }
+                    if (!selClause.getOrderByExprs().isEmpty()) {
+                        SortNode orderByNode = new SortNode(fromSelNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
+                    return fromSelNode;
                 }
+            }
         }
             throw new UnsupportedOperationException(
                     "Not implemented:  joins or subqueries in FROM clause");
