@@ -415,3 +415,56 @@ setup_testStringMatch = \
     INSERT INTO test_string_match VALUES ('strawberry'); \
     INSERT INTO test_string_match VALUES ('tangerine');
 
+
+# This setup SQL is used for the test-simple-joins test case
+setup_testSimpleJoins = \
+    CREATE TABLE test_simple_joins_table_one ( \
+        a INTEGER, \
+        b INTEGER \
+    ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 0, NULL ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 1, 10 ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 2, 20 ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 22, 20 ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( NULL, 20 ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 3, 30 ); \
+    INSERT INTO test_simple_joins_table_one VALUES ( 4, NULL );\
+\
+    CREATE TABLE test_simple_joins_table_two ( \
+        a INTEGER, \
+        b INTEGER \
+    ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 0, NULL ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 1, 10 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 2, 20 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 3, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 33, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 333, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( NULL, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 4, NULL );\
+\
+    CREATE TABLE test_simple_joins_table_three ( \
+        a INTEGER, \
+        b INTEGER \
+    ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 0, NULL ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 1, 10 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 2, 20 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 2, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 4, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 5, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 6, 30 ); \
+    INSERT INTO test_simple_joins_table_two VALUES ( 7, NULL );\
+    INSERT INTO test_simple_joins_table_two VALUES ( NULL, 50 );\
+    INSERT INTO test_simple_joins_table_two VALUES ( NULL, NULL );\
+\
+\
+    CREATE TABLE test_simple_joins_table_empty_one ( \
+        a INTEGER, \
+        b INTEGER \
+    ); \
+\
+    CREATE TABLE test_simple_joins_table_empty_two ( \
+        a INTEGER, \
+        b INTEGER \
+    ); 
