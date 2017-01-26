@@ -47,6 +47,8 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
 
     private boolean hasInitialized = false;
 
+    private boolean addNulls = false;
+
     public NestedLoopJoinNode(PlanNode leftChild, PlanNode rightChild,
                 JoinType joinType, Expression predicate) {
 
@@ -196,10 +198,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            System.out.println(leftTuple);
-            System.out.println(rightTuple);
-            System.out.print("what");
-            if (canJoinTuples()) {
+            if (addNulls || canJoinTuples()) {
                 if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
                         || joinType == JoinType.ANTIJOIN) {
                     matched = true;
@@ -207,10 +206,13 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
                 if (joinType == JoinType.SEMIJOIN || joinType == JoinType.ANTIJOIN) {
                     break_val = true;
                 }
-                return joinTuples(leftTuple, rightTuple);
+                if (addNulls) {
+                    addNulls = false;
+                    TupleLiteral nulls = new TupleLiteral (rightTuple.getColumnCount());
+                    return joinTuples(leftTuple, nulls);
+                }
             }
         }
-
         return null;
     }
 
@@ -241,16 +243,6 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
                 break_val = false;
             }
             if (rightNextTuple == null) {
-                if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
-                    Schema result;
-                    int null_count = rightTuple.getColumnCount();
-                    for (int i = 0; i < null_count; i++) {
-                        rightTuple.setColumnValue(i, null);
-                    }
-                } else if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
-                        || joinType == JoinType.ANTIJOIN)) {
-                    matched = false;
-                }
                 rightChild.initialize();
                 rightTuple = rightChild.getNextTuple();
                 Tuple leftNextTuple = leftChild.getNextTuple();
@@ -264,6 +256,20 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             else {
                 rightTuple = rightNextTuple;
             }
+        }
+        System.out.println(leftTuple);
+        System.out.println(rightTuple);
+        if (canJoinTuples()) {
+            if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
+                    || joinType == JoinType.ANTIJOIN) {
+                matched = true;
+            }
+        }
+        if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
+            addNulls = true;
+        } else if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
+                || joinType == JoinType.ANTIJOIN)) {
+            matched = false;
         }
         return true;
     }
