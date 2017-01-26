@@ -253,9 +253,9 @@ public class SimplePlanner extends AbstractPlannerImpl {
             PlanNode joinNode = makeJoinPlan(fromClause);
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode;
-                if (processor.getAggFunct() != null) {
+                if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                     HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(joinNode,
-                            selClause.getGroupByExprs(),processor.getAggFunct());
+                            selClause.getGroupByExprs(), processor.getAggFunct());
                     aggregateNode.prepare();
                     if(selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
@@ -274,7 +274,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 SimpleFilterNode whereNode = new SimpleFilterNode(joinNode,
                         selClause.getWhereExpr());
                 whereNode.prepare();
-                if (processor.getAggFunct() != null) {
+                if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                     HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
                             selClause.getGroupByExprs(),processor.getAggFunct());
                     aggregateNode.prepare();
@@ -299,7 +299,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 if (fromClause.isRenamed()){
                     RenameNode renameNode = new RenameNode(fileScanNode, fromClause.getResultName());
                     renameNode.prepare();
-                    if (processor.getAggFunct() != null) {
+                    if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                         HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(renameNode,
                                 selClause.getGroupByExprs(),processor.getAggFunct());
                         aggregateNode.prepare();
@@ -315,7 +315,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         projNode = new ProjectNode(renameNode, selClause.getSelectValues());
                     }
                 } else {
-                    if (processor.getAggFunct() != null) {
+                    if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
 
                         HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(fileScanNode,
                                 selClause.getGroupByExprs(), processor.getAggFunct());
@@ -337,7 +337,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
             } else {
                 SelectNode selectNode = makeSimpleSelect(fromClause.getTableName(),
                         selClause.getWhereExpr(), null);
-                if (processor.getAggFunct() != null) {
+                if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                     HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(selectNode,
                             selClause.getGroupByExprs(),processor.getAggFunct());
                     aggregateNode.prepare();
@@ -362,7 +362,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                 whereNode.prepare();
                 if (!selClause.isTrivialProject()) {
                     ProjectNode projNode;
-                    if (processor.getAggFunct() != null) {
+                    if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                         HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
                                 selClause.getGroupByExprs(),processor.getAggFunct());
                         aggregateNode.prepare();
@@ -381,7 +381,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     projNode.prepare();
                     return projNode;
                 } else {
-                    if (processor.getAggFunct() != null) {
+                    if (processor.getAggFunct() != null || selClause.getGroupByExprs() != null) {
                         HashedGroupAggregateNode aggregateNode = new HashedGroupAggregateNode(whereNode,
                                 selClause.getGroupByExprs(),processor.getAggFunct());
                         aggregateNode.prepare();
