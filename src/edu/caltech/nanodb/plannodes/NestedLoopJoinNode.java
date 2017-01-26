@@ -47,7 +47,13 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
 
     private boolean hasInitialized = false;
 
-    private boolean addNulls = false;
+    private boolean endLoop = false;
+
+    private boolean continueWhile = false;
+
+    private boolean emptyOuterJoinTable = false;
+
+    private Tuple prevLeftTuple;
 
     public NestedLoopJoinNode(PlanNode leftChild, PlanNode rightChild,
                 JoinType joinType, Expression predicate) {
@@ -198,21 +204,32 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            if (addNulls || canJoinTuples()) {
-                if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
-                        || joinType == JoinType.ANTIJOIN) {
-                    matched = true;
+
+            if(emptyOuterJoinTable) {
+                TupleLiteral nulls = new TupleLiteral(rightSchema.getColumnNames().size());
+                return joinTuples(leftTuple, nulls);
+            }
+            else if (endLoop && !matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
+                endLoop = false;
+                if (prevLeftTuple != null) {
+                    TupleLiteral nulls = new TupleLiteral(rightTuple.getColumnCount());
+                    continueWhile = true;
+                    return joinTuples(prevLeftTuple, nulls);
                 }
+            }
+            else if (canJoinTuples()) {
                 if (joinType == JoinType.SEMIJOIN || joinType == JoinType.ANTIJOIN) {
                     break_val = true;
                 }
-                if (addNulls) {
-                    addNulls = false;
-                    TupleLiteral nulls = new TupleLiteral (rightTuple.getColumnCount());
-                    return joinTuples(leftTuple, nulls);
+                else {
+                    if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER){
+                        matched = true;
+                    }
+                    return joinTuples(leftTuple, rightTuple);
                 }
             }
         }
+
         return null;
     }
 
@@ -225,9 +242,25 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
      *         {@code false} if no more pairs of tuples are available to join.
      */
     private boolean getTuplesToJoin() throws IOException {
+        if (continueWhile) {
+            matched = false;
+            continueWhile = false;
+            return true;
+        }
+
         Tuple rightNextTuple = rightChild.getNextTuple();
         if (!hasInitialized) {
             Tuple leftNextTuple = leftChild.getNextTuple();
+            if (rightNextTuple == null && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
+                emptyOuterJoinTable = true;
+                leftTuple = leftNextTuple;
+                if (leftNextTuple == null) {
+                    done = true;
+                    hasInitialized = false;
+                    return false;
+                }
+                return true;
+            }
             if (leftNextTuple == null || rightNextTuple == null ) {
                 return false;
             }
@@ -236,41 +269,42 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             hasInitialized = true;
         }
         else {
+            /*
             if (break_val && joinType == JoinType.SEMIJOIN) {
                 rightChild.initialize();
                 Tuple leftNextTuple = leftChild.getNextTuple();
                 leftTuple = leftNextTuple;
                 break_val = false;
+            } */
+            if (done) {
+                return false;
             }
             if (rightNextTuple == null) {
+                endLoop = true;
+                if (!matched) {
+                    prevLeftTuple = leftTuple;
+                }
+                else {
+                    prevLeftTuple = null;
+                }
+                matched = false;
                 rightChild.initialize();
                 rightTuple = rightChild.getNextTuple();
                 Tuple leftNextTuple = leftChild.getNextTuple();
                 if (leftNextTuple == null) {
                     done = true;
                     hasInitialized = false;
-                    return false;
+                    if (joinType == JoinType.INNER)
+                        return false;
                 }
                 leftTuple = leftNextTuple;
+
             }
             else {
                 rightTuple = rightNextTuple;
             }
         }
-        System.out.println(leftTuple);
-        System.out.println(rightTuple);
-        if (canJoinTuples()) {
-            if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
-                    || joinType == JoinType.ANTIJOIN) {
-                matched = true;
-            }
-        }
-        if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
-            addNulls = true;
-        } else if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
-                || joinType == JoinType.ANTIJOIN)) {
-            matched = false;
-        }
+
         return true;
     }
 
