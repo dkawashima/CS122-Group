@@ -45,6 +45,8 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
 
     private boolean matched = false;
 
+    private boolean hasInitialized = false;
+
     public NestedLoopJoinNode(PlanNode leftChild, PlanNode rightChild,
                 JoinType joinType, Expression predicate) {
 
@@ -194,6 +196,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
+            System.out.println("bye");
             if (canJoinTuples()) {
                 if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
                         || joinType == JoinType.ANTIJOIN) {
@@ -218,6 +221,13 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
      *         {@code false} if no more pairs of tuples are available to join.
      */
     private boolean getTuplesToJoin() throws IOException {
+        if (!hasInitialized) {
+            if (leftChild.getNextTuple() == null|| rightChild.getNextTuple() == null) {
+                return false;
+            }
+            leftTuple = leftChild.getNextTuple();
+            hasInitialized = true;
+        }
         if (break_val && joinType == JoinType.SEMIJOIN){
             rightChild.initialize();
             leftTuple = leftChild.getNextTuple();
@@ -231,7 +241,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return false;
 
         }
-        if (rightChild.getNextTuple() == null){
+        else if (rightChild.getNextTuple() == null){
             if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)){
                 Schema result;
                 int null_count = rightTuple.getColumnCount();
@@ -245,6 +255,9 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             }
             rightChild.initialize();
             leftTuple = leftChild.getNextTuple();
+        }
+        else {
+            rightTuple = rightChild.getNextTuple();
         }
         return true;
     }
