@@ -7,10 +7,11 @@ import edu.caltech.nanodb.expressions.FunctionCall;
 import edu.caltech.nanodb.expressions.ColumnValue;
 import edu.caltech.nanodb.expressions.ColumnName;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 public class AggregateExpressionProcessor implements ExpressionProcessor {
-    private Map<String, FunctionCall> agg_funct;
+    private HashMap<String, FunctionCall> agg_funct;
     private int errorCheck;
 
     public void enter(Expression e){};
@@ -41,6 +42,10 @@ public class AggregateExpressionProcessor implements ExpressionProcessor {
                         }
                     }
                     String key = call.toString();
+                    if (agg_funct == null){
+                        agg_funct = new HashMap<String, FunctionCall>();
+                    }
+
                     agg_funct.put(key, call);
                     Expression exp = new ColumnValue(new ColumnName(call.toString()));
                     return exp;
