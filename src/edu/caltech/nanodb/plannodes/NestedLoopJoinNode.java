@@ -196,7 +196,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            System.out.println("bye");
+            System.out.print("what");
             if (canJoinTuples()) {
                 if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
                         || joinType == JoinType.ANTIJOIN) {
@@ -221,43 +221,45 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
      *         {@code false} if no more pairs of tuples are available to join.
      */
     private boolean getTuplesToJoin() throws IOException {
+        Tuple leftNextTuple = leftChild.getNextTuple();
+        Tuple rightNextTuple = rightChild.getNextTuple();
         if (!hasInitialized) {
-            if (leftChild.getNextTuple() == null|| rightChild.getNextTuple() == null) {
+            if (leftNextTuple == null || rightNextTuple == null ) {
                 return false;
             }
-            leftTuple = leftChild.getNextTuple();
+            leftTuple = leftNextTuple;
+            rightTuple = rightNextTuple;
             hasInitialized = true;
         }
-        if (break_val && joinType == JoinType.SEMIJOIN){
-            rightChild.initialize();
-            leftTuple = leftChild.getNextTuple();
-            break_val = false;
-        }
-        if (leftChild.getNextTuple() == null){
-            done = true;
-            if (schemaSwapped){
-                this.swap();
-            }
-            return false;
-
-        }
-        else if (rightChild.getNextTuple() == null){
-            if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)){
-                Schema result;
-                int null_count = rightTuple.getColumnCount();
-                for (int i = 0; i < null_count; i++) {
-                    rightTuple.setColumnValue(i, null);
-                }
-            } else
-                if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
-                    || joinType == JoinType.ANTIJOIN)){
-                matched = false;
-            }
-            rightChild.initialize();
-            leftTuple = leftChild.getNextTuple();
-        }
         else {
-            rightTuple = rightChild.getNextTuple();
+            if (break_val && joinType == JoinType.SEMIJOIN) {
+                rightChild.initialize();
+                leftTuple = leftNextTuple;
+                break_val = false;
+            }
+            if (rightNextTuple == null) {
+                if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)) {
+                    Schema result;
+                    int null_count = rightTuple.getColumnCount();
+                    for (int i = 0; i < null_count; i++) {
+                        rightTuple.setColumnValue(i, null);
+                    }
+                } else if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
+                        || joinType == JoinType.ANTIJOIN)) {
+                    matched = false;
+                }
+                rightChild.initialize();
+                rightTuple = rightChild.getNextTuple();
+                if (leftNextTuple == null) {
+                    done = true;
+                    hasInitialized = false;
+                    return false;
+                }
+                leftTuple = leftNextTuple;
+            }
+            else {
+                rightTuple = rightNextTuple;
+            }
         }
         return true;
     }
