@@ -220,8 +220,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
         if (whereExpr != null) {
             Expression new_exp = whereExpr.traverse(processor);
         }
-
-        if (selClause.getFromClause().isJoinExpr()) {
+        if (selClause.getFromClause() != null && selClause.getFromClause().isJoinExpr()) {
             Expression onExpr = selClause.getFromClause().getOnExpression();
             if (onExpr != null){
                 Expression new_exp = onExpr.traverse(processor);
