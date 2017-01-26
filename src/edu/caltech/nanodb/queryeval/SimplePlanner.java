@@ -247,6 +247,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
         if (fromClause == null) {
             ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
             projNode.prepare();
+            return projNode;
         }
         if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
             PlanNode joinNode = makeJoinPlan(fromClause);
