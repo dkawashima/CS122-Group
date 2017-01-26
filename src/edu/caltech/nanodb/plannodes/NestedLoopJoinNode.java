@@ -196,6 +196,8 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
+            System.out.println(leftTuple);
+            System.out.println(rightTuple);
             System.out.print("what");
             if (canJoinTuples()) {
                 if (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
@@ -221,9 +223,9 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
      *         {@code false} if no more pairs of tuples are available to join.
      */
     private boolean getTuplesToJoin() throws IOException {
-        Tuple leftNextTuple = leftChild.getNextTuple();
         Tuple rightNextTuple = rightChild.getNextTuple();
         if (!hasInitialized) {
+            Tuple leftNextTuple = leftChild.getNextTuple();
             if (leftNextTuple == null || rightNextTuple == null ) {
                 return false;
             }
@@ -234,6 +236,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
         else {
             if (break_val && joinType == JoinType.SEMIJOIN) {
                 rightChild.initialize();
+                Tuple leftNextTuple = leftChild.getNextTuple();
                 leftTuple = leftNextTuple;
                 break_val = false;
             }
@@ -250,6 +253,7 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
                 }
                 rightChild.initialize();
                 rightTuple = rightChild.getNextTuple();
+                Tuple leftNextTuple = leftChild.getNextTuple();
                 if (leftNextTuple == null) {
                     done = true;
                     hasInitialized = false;
