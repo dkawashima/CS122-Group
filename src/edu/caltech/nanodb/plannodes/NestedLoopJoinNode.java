@@ -234,9 +234,10 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
         if (rightChild.getNextTuple() == null){
             if (!matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER)){
                 Schema result;
-                /*TupleLiteral(leftTuple.getColumnCount());
-                buildJoinSchema('Finding NULL pad num of values: ', leftSchema, rightSchema,
-                        leftSchema.getCommonColumnNames(rightSchema)), result); */
+                int null_count = rightTuple.getColumnCount();
+                for (int i = 0; i < null_count; i++) {
+                    rightTuple.setColumnValue(i, null);
+                }
             } else
                 if (matched && (joinType == JoinType.LEFT_OUTER || joinType == JoinType.RIGHT_OUTER
                     || joinType == JoinType.ANTIJOIN)){
@@ -245,7 +246,6 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             rightChild.initialize();
             leftTuple = leftChild.getNextTuple();
         }
-
         return true;
     }
 
