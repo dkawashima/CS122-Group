@@ -44,10 +44,10 @@ public class TestGroupBy extends SqlTestCase {
         result = server.doCommand(
             "SELECT a FROM test_group_by_a GROUP BY a", true);
         TupleLiteral[] expected1 = {
-            createTupleFromNum( 1 ),
-            createTupleFromNum( 2 ),
-            createTupleFromNum( 3 ),
-            createTupleFromNum( 7 )
+                createTupleFromNum( 1 ),
+                createTupleFromNum( 2 ),
+                createTupleFromNum( 3 ),
+                createTupleFromNum( 7 )
         };
         assert checkSizeResults(expected1, result);
         assert checkUnorderedResults(expected1, result);
