@@ -277,10 +277,21 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     projNode = new ProjectNode(joinNode, selClause.getSelectValues());
                 }
                 projNode.prepare();
+                if (!selClause.getOrderByExprs().isEmpty()){
+                    SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
                 return projNode;
             } else {
-                if (selClause.getWhereExpr() == null)
+                if (selClause.getWhereExpr() == null){
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(joinNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
                     return joinNode;
+                }
                 SimpleFilterNode whereNode = new SimpleFilterNode(joinNode,
                         selClause.getWhereExpr());
                 whereNode.prepare();
@@ -298,9 +309,24 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     if (selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
                         havingNode.prepare();
+                        if (!selClause.getOrderByExprs().isEmpty()){
+                            SortNode orderByNode = new SortNode(havingNode, selClause.getOrderByExprs());
+                            orderByNode.prepare();
+                            return orderByNode;
+                        }
                         return havingNode;
                 }
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(aggregateNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
                     return aggregateNode;
+                }
+                if (!selClause.getOrderByExprs().isEmpty()){
+                    SortNode orderByNode = new SortNode(whereNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
                 }
                 return whereNode;
             }
@@ -364,6 +390,11 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     }
                 }
                 projNode.prepare();
+                if (!selClause.getOrderByExprs().isEmpty()){
+                    SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
                 return projNode;
             } else {
                 SelectNode selectNode = makeSimpleSelect(fromClause.getTableName(),
@@ -382,9 +413,24 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     if(selClause.getHavingExpr() != null) {
                         SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
                         havingNode.prepare();
+                        if (!selClause.getOrderByExprs().isEmpty()){
+                            SortNode orderByNode = new SortNode(havingNode, selClause.getOrderByExprs());
+                            orderByNode.prepare();
+                            return orderByNode;
+                        }
                         return havingNode;
                     }
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(aggregateNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
                     return aggregateNode;
+                }
+                if (!selClause.getOrderByExprs().isEmpty()){
+                    SortNode orderByNode = new SortNode(selectNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
                 }
                 return selectNode;
             }
@@ -424,6 +470,11 @@ public class SimplePlanner extends AbstractPlannerImpl {
                         projNode = new ProjectNode(whereNode, selClause.getSelectValues());
                     }
                     projNode.prepare();
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
                     return projNode;
                 } else {
                     if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
@@ -441,9 +492,25 @@ public class SimplePlanner extends AbstractPlannerImpl {
                             SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode,
                                     selClause.getHavingExpr());
                             havingNode.prepare();
+                            if (!selClause.getOrderByExprs().isEmpty()){
+                                SortNode orderByNode = new SortNode(havingNode, selClause.getOrderByExprs());
+                                orderByNode.prepare();
+                                return orderByNode;
+                            }
+
                             return havingNode;
                         }
+                        if (!selClause.getOrderByExprs().isEmpty()){
+                            SortNode orderByNode = new SortNode(aggregateNode, selClause.getOrderByExprs());
+                            orderByNode.prepare();
+                            return orderByNode;
+                        }
                         return aggregateNode;
+                    }
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(whereNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
                     }
                     return whereNode;
                 }
