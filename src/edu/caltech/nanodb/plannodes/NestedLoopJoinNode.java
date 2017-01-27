@@ -269,13 +269,13 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
             hasInitialized = true;
         }
         else {
-            /*
+
             if (break_val && joinType == JoinType.SEMIJOIN) {
                 rightChild.initialize();
                 Tuple leftNextTuple = leftChild.getNextTuple();
                 leftTuple = leftNextTuple;
                 break_val = false;
-            } */
+            }
             if (done) {
                 return false;
             }
