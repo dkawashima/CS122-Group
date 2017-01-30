@@ -113,8 +113,12 @@ public class SimpleFilterNode extends SelectNode {
         schema = leftChild.getSchema();
         ArrayList<ColumnStats> childStats = leftChild.getStats();
 
-        // TODO:  Compute the cost of the plan node!
-        cost = null;
+        /** The cost of the input subplan. */
+        PlanCost inputCost = leftChild.getCost();
+        cost = new PlanCost(inputCost);
+        cost.cpuCost += inputCost.numTuples;
+        cost.numTuples = inputCost.numTuples * SelectivityEstimator.estimateSelectivity(predicate, schema, childStats);
+
 
         // NOTE:  Normally we would also update the table statistics based on
         //        the predicate, but that's too complicated, so we'll leave

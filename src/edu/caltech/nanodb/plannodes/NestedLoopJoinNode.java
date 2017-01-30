@@ -178,6 +178,51 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
         // Use the parent class' helper-function to prepare the schema.
         prepareSchemaStats();
 
+        PlanCost leftChildCost = leftChild.getCost();
+        PlanCost rightChildCost = rightChild.getCost();
+
+        cost = new PlanCost(leftChildCost);
+        cost.cpuCost += 2 * rightChildCost.cpuCost + leftChildCost.cpuCost;
+
+        // Best case number of blocks
+        cost.numBlockIOs += rightChildCost.numBlockIOs;
+
+        if (joinType == JoinType.CROSS) {
+            cost.numTuples = leftChildCost.numTuples * rightChildCost.numTuples;
+            cost.tupleSize = leftChildCost.tupleSize + rightChildCost.tupleSize;
+        }
+        // Semijoin has same number of tuples as inner join
+        // Tuple Size of (max) Inner Join, Semi Join, Anti Join is size of Left Child' tuple
+        if (joinType == JoinType.INNER || joinType == JoinType.RIGHT_OUTER || joinType == JoinType.LEFT_OUTER
+                || joinType == JoinType.FULL_OUTER || joinType == JoinType.SEMIJOIN || joinType == JoinType.ANTIJOIN){
+            float selectivityLeft = SelectivityEstimator.estimateSelectivity(predicate, leftSchema, leftStats);
+            float selectivityRight = SelectivityEstimator.estimateSelectivity(predicate, rightSchema, rightStats);
+            if (selectivityLeft * leftChildCost.numTuples > selectivityRight * rightChildCost.numTuples) {
+                cost.numTuples = leftChildCost.numTuples * rightChildCost.numTuples
+                        / (selectivityLeft * leftChildCost.numTuples);
+            } else {
+                cost.numTuples = leftChildCost.numTuples * rightChildCost.numTuples
+                        / (selectivityRight * rightChildCost.numTuples);
+            }
+        }
+        if (joinType == JoinType.RIGHT_OUTER){
+            cost.numTuples += rightChildCost.numTuples;
+            cost.tupleSize = leftChildCost.tupleSize + rightChildCost.tupleSize;
+        }
+        if (joinType == JoinType.LEFT_OUTER) {
+            cost.numTuples += leftChildCost.numTuples;
+            cost.tupleSize = leftChildCost.tupleSize + rightChildCost.tupleSize;
+        }
+        if (joinType == JoinType.FULL_OUTER){
+            cost.numTuples += leftChildCost.numTuples + rightChildCost.numTuples;
+            cost.tupleSize = leftChildCost.tupleSize + rightChildCost.tupleSize;
+        }
+        // Antijoin takes away number of tuples computed in inner join
+        if (joinType == JoinType.ANTIJOIN) {
+            cost.numTuples = leftChildCost.numTuples - cost.numTuples;
+        }
+
+
         // TODO:  Implement the rest
         cost = null;
     }
