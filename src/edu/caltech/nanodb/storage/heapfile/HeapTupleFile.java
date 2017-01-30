@@ -638,8 +638,72 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
     @Override
     public void analyze() throws IOException {
-        // TODO:  Complete this implementation.
-        throw new UnsupportedOperationException("Not yet implemented!");
+        // Scan through the data pages until we hit the end of the table
+        // file.  It may be that the first run of data pages is empty,
+        // so just keep looking until we hit the end of the file.
+
+        // Keep track of the current tuple we are analyzing
+        HeapFilePageTuple current_tuple;
+
+        //Keeps track of the total table size, number of tuples, and number of pages
+        float totalSize = 0;
+        int numTuples = 0;
+        int numDataPages = 0;
+
+        //Keep an array of each column's statistics
+        ColumnStatsCollector[] columnStatsCollectors = new ColumnStatsCollector [getSchema().numColumns()];
+        // Header page is page 0, so the first data page is page 1.
+        for (int iPage = 1; /* loop until no pages left */ ; iPage++) {
+
+            // Look for the next tuple on the next page, if it exists.
+            try {
+                DBPage dbPage = storageManager.loadDBPage(dbFile, iPage);
+                numDataPages++;
+                totalSize += DataPage.getTupleDataEnd(dbPage) - DataPage.getTupleDataStart(dbPage);
+                int numSlots = DataPage.getNumSlots(dbPage);
+                for (int iSlot = 0; iSlot < numSlots; iSlot++) {
+
+                    // Get the offset of the tuple in the page.  If it's 0 then
+                    // the slot is empty, and we skip to the next slot.
+                    int offset = DataPage.getSlotValue(dbPage, iSlot);
+                    if (offset == DataPage.EMPTY_SLOT)
+                        continue;
+
+                    numTuples++;
+                    // This is the next tuple in the file.  Build up the HeapFilePageTuple object and analyze it.
+                    current_tuple = new HeapFilePageTuple(schema, dbPage, iSlot, offset);
+
+                    // Loop through all of the columns, adding the value to the corresponding ColumnStatsCollector
+                    for (int iColumn = 0; iColumn < getSchema().numColumns(); iColumn++) {
+                        columnStatsCollectors[iColumn].addValue(current_tuple.getColumnValue(iColumn));
+                    }
+                }
+                dbPage.unpin();
+            }
+            catch (EOFException e) {
+                // Hit the end of the file with no more tuples.  We are done
+                // scanning.
+                break;
+            }
+        }
+
+        //Collect all of the information necessary to pass into a new TableStats object
+        //Calculate the average tuple size
+        float avgTupleSize = totalSize / ((float)numTuples);
+
+        //Fill in an ArrayList object with the correct ColumnStats, made from the array of ColumnStatsCollector's
+        ArrayList<ColumnStats> columnStats = new ArrayList<ColumnStats>();
+        for (int iColumnStat = 0; iColumnStat < columnStatsCollectors.length; iColumnStat++) {
+            columnStats.add(columnStatsCollectors[iColumnStat].getColumnStats());
+        }
+        TableStats tablestats = new TableStats(numDataPages, numTuples, avgTupleSize, columnStats);
+
+        //Store the TableStats object into this object's "stats" field
+        this.stats = tablestats;
+
+        //Call the method saveMetaData from the HeapTupleFileManager class
+        heapFileManager.saveMetadata(this);
+
     }
 
 
