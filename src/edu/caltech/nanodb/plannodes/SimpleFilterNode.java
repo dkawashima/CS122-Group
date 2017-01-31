@@ -113,7 +113,7 @@ public class SimpleFilterNode extends SelectNode {
         schema = leftChild.getSchema();
         ArrayList<ColumnStats> childStats = leftChild.getStats();
 
-        /** The cost of the input subplan. */
+        // The cost of the input subplan.
         PlanCost inputCost = leftChild.getCost();
         cost = new PlanCost(inputCost);
         cost.cpuCost += inputCost.numTuples;
