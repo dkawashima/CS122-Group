@@ -117,6 +117,9 @@ public class SelectivityEstimator {
             CompareOperator comp = (CompareOperator) expr;
             selectivity = estimateCompareSelectivity(comp, exprSchema, stats);
         }
+        else if(expr == null) {
+            // return 1.f;
+        }
 
         return selectivity;
     }
@@ -145,14 +148,28 @@ public class SelectivityEstimator {
     public static float estimateBoolOperSelectivity(BooleanOperator bool,
         Schema exprSchema, ArrayList<ColumnStats> stats) {
 
-        System.out.println("estimateBoolOperSelectivity    ");
+        System.out.println("!!!!!!!!!\n!!!!!!!!!!\nestimateBoolOperSelectivity    ");
         System.out.println(bool.toString());
+        System.out.println(exprSchema.toString());
 
         float selectivity = 1.0f;
+
+        // bool.getNumTerms()
+        // bool.getTerm(int i) 
+        /*
+
+estimateSelectivity(Expression expr, Schema exprSchema,
+                                            ArrayList<ColumnStats> stats) 
+
+        */
 
         switch (bool.getType()) {
         case AND_EXPR:
             System.out.println("AND!!");
+
+            for(int i = 0; i < bool.getNumTerms(); i++) {
+                selectivity *= estimateSelectivity(bool.getTerm(i), exprSchema, stats);
+            }
 
             // TODO:  Compute selectivity of AND expression.
             break;
@@ -160,11 +177,18 @@ public class SelectivityEstimator {
         case OR_EXPR:
             System.out.println("OR!!!");
 
+            for(int i = 0; i < bool.getNumTerms(); i++) {
+                selectivity *= (1.f - estimateSelectivity(bool.getTerm(i), exprSchema, stats));
+            }
+            selectivity = 1.f - selectivity;
+
             // TODO:  Compute selectivity of OR expression.
             break;
 
         case NOT_EXPR:
             // TODO:  Compute selectivity of NOT expression.
+            selectivity = 1.f - estimateSelectivity(bool.getTerm(0), exprSchema, stats);
+
             break;
 
         default:
@@ -467,6 +491,7 @@ public class SelectivityEstimator {
         System.out.println(exprSchema.getColumnNames());
         System.out.println(stats.size());
         System.out.println(colTwoIndex);
+
 
         ColumnStats colTwoStats = stats.get(colTwoIndex);
 
