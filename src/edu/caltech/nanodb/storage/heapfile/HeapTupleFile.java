@@ -652,6 +652,18 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
         //Keep an array of each column's statistics
         ColumnStatsCollector[] columnStatsCollectors = new ColumnStatsCollector [getSchema().numColumns()];
+        
+
+        // TODO check if right 1/30
+        for (int iColumn = 0; iColumn < getSchema().numColumns(); iColumn++) {
+
+            SQLDataType theType = getSchema().getColumnInfo(iColumn).getType().getBaseType();
+            // ColumnInfo getColumnInfo(int i)
+            // ColumnType getType()
+            // SQLDataType getBaseType()
+
+            columnStatsCollectors[iColumn] = new ColumnStatsCollector(theType);
+        }
         // Header page is page 0, so the first data page is page 1.
         for (int iPage = 1; /* loop until no pages left */ ; iPage++) {
 
@@ -675,7 +687,30 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
                     // Loop through all of the columns, adding the value to the corresponding ColumnStatsCollector
                     for (int iColumn = 0; iColumn < getSchema().numColumns(); iColumn++) {
+                        
+                        // DEBUGGG
+                        // int columnStatsCollectors_size = columnStatsCollectors.length;
+                        // // String whateverthafuck = current_tuple.getColumnValue(iColumn).toString();
+                        // System.out.print("Fuck you: columnStatsCollectors_size: ");
+                        // System.out.print(columnStatsCollectors_size);
+                        // System.out.print("  current_tuple.getColumnValue(iColumn):");
+                        // System.out.print(whateverthafuck);
+                        // System.out.print("   iColumn:");
+                        // System.out.print(iColumn);
+                        // System.out.print("\n");
+
+                        // ColumnStatsCollector that_thing = columnStatsCollectors[iColumn];
+                        // Object to_add = current_tuple.getColumnValue(iColumn);
+
+                        // Object shit_add = new Integer(69);
+
+
+                        // // columnStatsCollectors[iColumn].addValue(shit_add);
+
                         columnStatsCollectors[iColumn].addValue(current_tuple.getColumnValue(iColumn));
+
+
+
                     }
                 }
                 dbPage.unpin();
