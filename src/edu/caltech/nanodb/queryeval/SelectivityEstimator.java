@@ -118,7 +118,7 @@ public class SelectivityEstimator {
             selectivity = estimateCompareSelectivity(comp, exprSchema, stats);
         }
         else if(expr == null) {
-            // return 1.f;
+            return 1.f;
         }
 
         return selectivity;
@@ -148,47 +148,24 @@ public class SelectivityEstimator {
     public static float estimateBoolOperSelectivity(BooleanOperator bool,
         Schema exprSchema, ArrayList<ColumnStats> stats) {
 
-        System.out.println("!!!!!!!!!\n!!!!!!!!!!\nestimateBoolOperSelectivity    ");
-        System.out.println(bool.toString());
-        System.out.println(exprSchema.toString());
-
         float selectivity = 1.0f;
-
-        // bool.getNumTerms()
-        // bool.getTerm(int i) 
-        /*
-
-estimateSelectivity(Expression expr, Schema exprSchema,
-                                            ArrayList<ColumnStats> stats) 
-
-        */
 
         switch (bool.getType()) {
         case AND_EXPR:
-            System.out.println("AND!!");
-
             for(int i = 0; i < bool.getNumTerms(); i++) {
                 selectivity *= estimateSelectivity(bool.getTerm(i), exprSchema, stats);
             }
-
-            // TODO:  Compute selectivity of AND expression.
             break;
 
         case OR_EXPR:
-            System.out.println("OR!!!");
-
             for(int i = 0; i < bool.getNumTerms(); i++) {
                 selectivity *= (1.f - estimateSelectivity(bool.getTerm(i), exprSchema, stats));
             }
             selectivity = 1.f - selectivity;
-
-            // TODO:  Compute selectivity of OR expression.
             break;
 
         case NOT_EXPR:
-            // TODO:  Compute selectivity of NOT expression.
             selectivity = 1.f - estimateSelectivity(bool.getTerm(0), exprSchema, stats);
-
             break;
 
         default:
@@ -198,9 +175,6 @@ estimateSelectivity(Expression expr, Schema exprSchema,
 
         logger.debug("Estimated selectivity of Boolean operator \"" + bool +
             "\" as " + selectivity);
-
-
-        System.out.println("OUT     ");
 
         return selectivity;
     }
@@ -290,7 +264,6 @@ estimateSelectivity(Expression expr, Schema exprSchema,
         float selectivity = DEFAULT_SELECTIVITY;
 
         // Pull out the critical values for making the estimates.
-
         int colIndex = exprSchema.getColumnIndex(columnValue.getColumnName());
         ColumnInfo colInfo = exprSchema.getColumnInfo(colIndex);
         SQLDataType sqlType = colInfo.getType().getBaseType();
@@ -301,35 +274,21 @@ estimateSelectivity(Expression expr, Schema exprSchema,
         boolean hasMinMaxValues = colStats.hasMinMaxValues();
         int cardinality = colStats.getNumUniqueValues();
 
-        // TODO: i am here
-
         Object value = literalValue.evaluate();
-
-        System.out.println("-------------\nComparing Col to Value");
 
         switch (compType) {
         case EQUALS:
         case NOT_EQUALS:
             // Compute the equality value.  Then, if inequality, invert the
             // result.
-
-            // TODO:  Compute the selectivity.  Note that the ColumnStats type
-            //        will return special values to indicate "unknown" stats;
-            //        your code should detect when this is the case, and fall
-            //        back on the default selectivity.
-
             if(cardinality == -1) { // Cardinality Unknown
                 return DEFAULT_SELECTIVITY;
             }
 
-            System.out.println("EQUALS or NOT_EQUALS");
-
-            // Selectivity = 1 / Cardinality of column
             selectivity = 1.f / cardinality;
 
             // If NOT_EQUALS, take complement of EQUALS
             if(compType == compType.valueOf("NOT_EQUALS")) {
-                System.out.println("NOT_EQUALS");
                 selectivity = 1.f - selectivity;
             }
 
@@ -342,44 +301,15 @@ estimateSelectivity(Expression expr, Schema exprSchema,
 
             // Only estimate selectivity for this kind of expression if the
             // column's type supports it.
-
-            System.out.println("GREATER_OR_EQUAL/LESS_THAN");
-
             if (typeSupportsCompareEstimates(sqlType) &&
                 colStats.hasDifferentMinMaxValues()) {
-
-                // TODO:  Compute the selectivity.  The if-condition ensures
-                //        that you will only compute selectivities if the type
-                //        supports it, and if there are valid stats.
-                
                 if(hasMinMaxValues == false) { // Check that min/max values are present
                     return DEFAULT_SELECTIVITY;
                 }
 
-                TypeConverter.Pair valAndMax = TypeConverter.coerceComparison(value, maxValue);
-                TypeConverter.Pair valAndMin = TypeConverter.coerceComparison(value, minValue);
-
-                Comparable valAndMaxLhsComp = (Comparable) valAndMax.value1;
-                Comparable valAndMaxRhsComp = (Comparable) valAndMax.value2;
-
-                Comparable valAndMinLhsComp = (Comparable) valAndMin.value1;
-                Comparable valAndMinRhsComp = (Comparable) valAndMin.value2;
-
-                int valAndMaxCompResult = valAndMaxLhsComp.compareTo(valAndMaxRhsComp);
-                int valAndMinCompResult = valAndMinLhsComp.compareTo(valAndMinRhsComp);
-
-                if(valAndMaxCompResult > 0) {
-                    selectivity = 0.f;
-                }
-                else if(valAndMinCompResult < 0) {
-                    selectivity = 1.f;
-                }
-                else {
-                    selectivity = computeRatio(value, maxValue, minValue, maxValue);
-                }
+                selectivity = computeRatio(value, maxValue, minValue, maxValue);
 
                 if(compType == compType.valueOf("LESS_THAN")) {
-                    System.out.println("LESS_THAN");
                     selectivity = 1.f - selectivity;
                 }
 
@@ -394,48 +324,15 @@ estimateSelectivity(Expression expr, Schema exprSchema,
 
             // Only estimate selectivity for this kind of expression if the
             // column's type supports it.
-
-            System.out.println("LESS_OR_EQUAL/GREATER_THAN");
-
             if (typeSupportsCompareEstimates(sqlType) &&
                 colStats.hasDifferentMinMaxValues()) {
-
-                // TODO:  Compute the selectivity.  Watch out for copy-paste
-                //        bugs...
-                
                 if(hasMinMaxValues == false) { // Check that min/max values are present
                     return DEFAULT_SELECTIVITY;
                 }
 
-                TypeConverter.Pair valAndMax = TypeConverter.coerceComparison(value, maxValue);
-                TypeConverter.Pair valAndMin = TypeConverter.coerceComparison(value, minValue);
-
-                Comparable valAndMaxLhsComp = (Comparable) valAndMax.value1;
-                Comparable valAndMaxRhsComp = (Comparable) valAndMax.value2;
-
-                Comparable valAndMinLhsComp = (Comparable) valAndMin.value1;
-                Comparable valAndMinRhsComp = (Comparable) valAndMin.value2;
-
-                int valAndMaxCompResult = valAndMaxLhsComp.compareTo(valAndMaxRhsComp);
-                int valAndMinCompResult = valAndMinLhsComp.compareTo(valAndMinRhsComp);
-
-                if(valAndMaxCompResult > 0) {
-                    selectivity = 1.f;
-                }
-                else if(valAndMinCompResult < 0) {
-                    selectivity = 0.f;
-                }
-                else {
-                    selectivity = computeRatio(minValue, value, minValue, maxValue);
-                }
-
-                if(compType == compType.valueOf("LESS_THAN")) {
-                    System.out.println("LESS_THAN");
-                    selectivity = 1.f - selectivity;
-                }
+                selectivity = computeRatio(minValue, value, minValue, maxValue);
 
                 if(compType == compType.valueOf("GREATER_THAN")) {
-                    System.out.println("GREATER_THAN");
                     selectivity = 1.f - selectivity;
                 }
 
@@ -481,24 +378,12 @@ estimateSelectivity(Expression expr, Schema exprSchema,
         float selectivity = DEFAULT_SELECTIVITY;
 
         // Pull out the critical values for making the estimates.
-
         int colOneIndex = exprSchema.getColumnIndex(columnOne.getColumnName());
         int colTwoIndex = exprSchema.getColumnIndex(columnTwo.getColumnName());
 
         ColumnStats colOneStats = stats.get(colOneIndex);
-
-        System.out.println("hello. stats and col2indx");
-        System.out.println(exprSchema.getColumnNames());
-        System.out.println(stats.size());
-        System.out.println(colTwoIndex);
-
-
         ColumnStats colTwoStats = stats.get(colTwoIndex);
 
-        // TODO:  Compute the selectivity.  Note that the ColumnStats type
-        //        will return special values to indicate "unknown" stats;
-        //        your code should detect when this is the case, and fall
-        //        back on the default selectivity.
         int cardinalityOne = colOneStats.getNumUniqueValues();
         int cardinalityTwo = colTwoStats.getNumUniqueValues();
 
