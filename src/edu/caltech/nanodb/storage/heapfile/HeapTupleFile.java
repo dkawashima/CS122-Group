@@ -645,23 +645,17 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         // Keep track of the current tuple we are analyzing
         HeapFilePageTuple current_tuple;
 
-        //Keeps track of the total table size, number of tuples, and number of pages
+        // Keeps track of the total table size, number of tuples, and number of pages
         float totalSize = 0;
         int numTuples = 0;
         int numDataPages = 0;
 
-        //Keep an array of each column's statistics
+        // Keep an array of each column's statistics
         ColumnStatsCollector[] columnStatsCollectors = new ColumnStatsCollector [getSchema().numColumns()];
-        
 
-        // TODO check if right 1/30
         for (int iColumn = 0; iColumn < getSchema().numColumns(); iColumn++) {
 
             SQLDataType theType = getSchema().getColumnInfo(iColumn).getType().getBaseType();
-            // ColumnInfo getColumnInfo(int i)
-            // ColumnType getType()
-            // SQLDataType getBaseType()
-
             columnStatsCollectors[iColumn] = new ColumnStatsCollector(theType);
         }
         // Header page is page 0, so the first data page is page 1.
@@ -687,30 +681,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
                     // Loop through all of the columns, adding the value to the corresponding ColumnStatsCollector
                     for (int iColumn = 0; iColumn < getSchema().numColumns(); iColumn++) {
-                        
-                        // DEBUGGG
-                        // int columnStatsCollectors_size = columnStatsCollectors.length;
-                        // // String whateverthafuck = current_tuple.getColumnValue(iColumn).toString();
-                        // System.out.print("Fuck you: columnStatsCollectors_size: ");
-                        // System.out.print(columnStatsCollectors_size);
-                        // System.out.print("  current_tuple.getColumnValue(iColumn):");
-                        // System.out.print(whateverthafuck);
-                        // System.out.print("   iColumn:");
-                        // System.out.print(iColumn);
-                        // System.out.print("\n");
-
-                        // ColumnStatsCollector that_thing = columnStatsCollectors[iColumn];
-                        // Object to_add = current_tuple.getColumnValue(iColumn);
-
-                        // Object shit_add = new Integer(69);
-
-
-                        // // columnStatsCollectors[iColumn].addValue(shit_add);
-
                         columnStatsCollectors[iColumn].addValue(current_tuple.getColumnValue(iColumn));
-
-
-
                     }
                 }
                 dbPage.unpin();
@@ -722,21 +693,21 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             }
         }
 
-        //Collect all of the information necessary to pass into a new TableStats object
-        //Calculate the average tuple size
+        // Collect all of the information necessary to pass into a new TableStats object
+        // Calculate the average tuple size
         float avgTupleSize = totalSize / ((float)numTuples);
 
-        //Fill in an ArrayList object with the correct ColumnStats, made from the array of ColumnStatsCollector's
+        // Fill in an ArrayList object with the correct ColumnStats, made from the array of ColumnStatsCollector's
         ArrayList<ColumnStats> columnStats = new ArrayList<ColumnStats>();
         for (int iColumnStat = 0; iColumnStat < columnStatsCollectors.length; iColumnStat++) {
             columnStats.add(columnStatsCollectors[iColumnStat].getColumnStats());
         }
         TableStats tablestats = new TableStats(numDataPages, numTuples, avgTupleSize, columnStats);
 
-        //Store the TableStats object into this object's "stats" field
+        // Store the TableStats object into this object's "stats" field
         this.stats = tablestats;
 
-        //Call the method saveMetaData from the HeapTupleFileManager class
+        // Call the method saveMetaData from the HeapTupleFileManager class
         heapFileManager.saveMetadata(this);
 
     }
