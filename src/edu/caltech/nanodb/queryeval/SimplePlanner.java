@@ -253,15 +253,26 @@ public class SimplePlanner extends AbstractPlannerImpl {
         else if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR){
             PlanNode joinNode = makeJoinPlan(fromClause);
             if (!selClause.isTrivialProject()) {
+                if (selClause.getWhereExpr() == null){
+                    if (!selClause.getOrderByExprs().isEmpty()){
+                        SortNode orderByNode = new SortNode(joinNode, selClause.getOrderByExprs());
+                        orderByNode.prepare();
+                        return orderByNode;
+                    }
+                    return joinNode;
+                }
+                SimpleFilterNode whereNode = new SimpleFilterNode(joinNode,
+                        selClause.getWhereExpr());
+                whereNode.prepare();
                 ProjectNode projNode;
                 if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
                     HashedGroupAggregateNode aggregateNode;
                     if (processor.getAggFunct() == null){
                         HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
-                        aggregateNode = new HashedGroupAggregateNode(joinNode,
+                        aggregateNode = new HashedGroupAggregateNode(whereNode,
                                 selClause.getGroupByExprs(),empty_agg);
                     } else {
-                        aggregateNode = new HashedGroupAggregateNode(joinNode,
+                        aggregateNode = new HashedGroupAggregateNode(whereNode,
                                 selClause.getGroupByExprs(),processor.getAggFunct());
                     }
                     aggregateNode.prepare();
@@ -274,7 +285,7 @@ public class SimplePlanner extends AbstractPlannerImpl {
                     }
                 }
                 else {
-                    projNode = new ProjectNode(joinNode, selClause.getSelectValues());
+                    projNode = new ProjectNode(whereNode, selClause.getSelectValues());
                 }
                 projNode.prepare();
                 if (!selClause.getOrderByExprs().isEmpty()){
