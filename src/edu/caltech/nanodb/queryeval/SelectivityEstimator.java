@@ -8,9 +8,12 @@ import edu.caltech.nanodb.expressions.ArithmeticOperator;
 import edu.caltech.nanodb.expressions.BooleanOperator;
 import edu.caltech.nanodb.expressions.ColumnValue;
 import edu.caltech.nanodb.expressions.CompareOperator;
+import edu.caltech.nanodb.expressions.InValuesOperator;
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.LiteralValue;
 import edu.caltech.nanodb.expressions.TypeConverter;
+import edu.caltech.nanodb.expressions.ColumnName;
+
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.SQLDataType;
@@ -117,6 +120,11 @@ public class SelectivityEstimator {
             CompareOperator comp = (CompareOperator) expr;
             selectivity = estimateCompareSelectivity(comp, exprSchema, stats);
         }
+        else if (expr instanceof InValuesOperator) {
+            // This is a simple comparison between expressions.
+            InValuesOperator comp = (InValuesOperator) expr;
+            selectivity = estimateInValuesSelectivity(comp, exprSchema, stats);
+        }
         else if(expr == null) {
             return 1.f;
         }
@@ -124,6 +132,49 @@ public class SelectivityEstimator {
         return selectivity;
     }
 
+    /**
+     * This function computes the selectivity estimate for a general
+     * "is in" operation. Our estimation takes the size of the 
+     * in values array, which we estimate to be the cardinality
+     * and divides it by the cardinality of the whole column.
+     *
+     * This gives a good estimate since people will usually not 
+     * have duplicates in the in value array, such as :
+     *      select * from stores where store_id in (0, 0, 0, 0, 0, 1);
+     *
+     * @param inOp the expression whose selectivity we are estimating
+     *
+     * @param exprSchema a schema describing the environment that the expression
+     *        will be evaluated within
+     *
+     * @param stats statistics that may be helpful in estimating the selectivity
+     *
+     * @return the estimated selectivity as a float 
+    */
+    public static float estimateInValuesSelectivity(InValuesOperator inOp,
+        Schema exprSchema, ArrayList<ColumnStats> stats) {
+
+        ColumnInfo colInfo = inOp.getColumnInfo(exprSchema);
+
+        String toStringOutput = inOp.toString();
+        String[] splitted = toStringOutput.split(" ");
+        String[] tblAndName = splitted[0].split("\\.");
+
+        ColumnName colName = new ColumnName(tblAndName[0], tblAndName[1]);
+        int colIndex = exprSchema.getColumnIndex(colName);
+
+        ColumnStats colStats = stats.get(colIndex);
+
+        int colCardinality = colStats.getNumUniqueValues();
+        int inSetCardinality = inOp.getValues().size();
+
+        if(colCardinality == -1 || colCardinality == 0) {
+            return DEFAULT_SELECTIVITY;
+        }
+
+        return ((float) inSetCardinality) / ((float) colCardinality);
+
+    }
 
     /**
      * This function computes a selectivity estimate for a general Boolean

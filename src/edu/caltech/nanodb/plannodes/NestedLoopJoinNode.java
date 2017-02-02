@@ -183,8 +183,8 @@ public class NestedLoopJoinNode extends ThetaJoinNode {
 
         cost = new PlanCost(leftChildCost);
         // Total cost is sum of previous cost + best case for new cost
-        cost.cpuCost = rightChildCost.cpuCost + leftChildCost.cpuCost + leftChildCost.numTuples *
-                rightChildCost.numTuples;
+        cost.cpuCost = leftChildCost.cpuCost + leftChildCost.numTuples *
+                rightChildCost.cpuCost;
 
         // Best case number of blocks
         cost.numBlockIOs += rightChildCost.numBlockIOs;
