@@ -11,6 +11,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import edu.caltech.nanodb.expressions.BooleanOperator;
+import edu.caltech.nanodb.expressions.PredicateUtils;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.Expression;
@@ -217,7 +219,14 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      * This helper method pulls the essential details for join optimization
      * out of a <tt>FROM</tt> clause.
      *
-     * TODO:  FILL IN DETAILS.
+     * This method generates a collection of all of the conjuncts from non-leaf
+     * <tt>FROM</tt> clauses and an arrayList of all of the leaf <tt>FROM</tt>
+     * clauses. All base table, derived table, and outer join <tt>FROM</tt>
+     * clauses are considered leaf clauses, and are simply added to the result
+     * arrayList, which is passed in as a parameter. For non-leaf <tt>FROM</tt>
+     * clauses, such as inner join clauses, we add the conjunct to the collection,
+     * separating the conjunct in to subconjuncts when an AND boolean operator is
+     * involved.
      *
      * @param fromClause the from-clause to collect details from
      *
@@ -228,7 +237,35 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
     private void collectDetails(FromClause fromClause,
         HashSet<Expression> conjuncts, ArrayList<FromClause> leafFromClauses) {
 
-        // TODO:  IMPLEMENT
+        // Base Table and Derived Table are leaf clauses
+        if (fromClause.isBaseTable() || fromClause.isDerivedTable()){
+            leafFromClauses.add(fromClause);
+        }
+        if (fromClause.isJoinExpr()) {
+            // Outer Join is also considered to be a leaf clause
+            if (fromClause.isOuterJoin()) {
+                leafFromClauses.add(fromClause);
+            } else {
+                // Handle the non-leaf clause Inner Join case
+                Expression onExp = fromClause.getComputedJoinExpr();
+                if (onExp instanceof BooleanOperator) {
+                    // A Boolean AND, OR, or NOT operation.
+                    BooleanOperator bool = (BooleanOperator) onExp;
+                    // Split up Conjunct if this is an AND operation
+                    if (bool.getType() == BooleanOperator.Type.AND_EXPR){
+                        for (int i = 0; i < bool.getNumTerms(); i++) {
+                            PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                        }
+                    } else {
+                        PredicateUtils.collectConjuncts(onExp, conjuncts);
+                    }
+                } else {
+                    PredicateUtils.collectConjuncts(onExp, conjuncts);
+                }
+                collectDetails(fromClause.getLeftChild(), conjuncts, leafFromClauses);
+                collectDetails(fromClause.getRightChild(), conjuncts, leafFromClauses);
+            }
+        }
     }
 
 
