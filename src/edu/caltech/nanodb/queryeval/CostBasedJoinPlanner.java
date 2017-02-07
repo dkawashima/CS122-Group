@@ -13,12 +13,11 @@ import java.util.Set;
 
 import edu.caltech.nanodb.expressions.BooleanOperator;
 import edu.caltech.nanodb.expressions.PredicateUtils;
+import edu.caltech.nanodb.plannodes.*;
+import edu.caltech.nanodb.relations.JoinType;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.Expression;
-import edu.caltech.nanodb.plannodes.FileScanNode;
-import edu.caltech.nanodb.plannodes.PlanNode;
-import edu.caltech.nanodb.plannodes.SelectNode;
 import edu.caltech.nanodb.queryast.FromClause;
 import edu.caltech.nanodb.queryast.SelectClause;
 import edu.caltech.nanodb.relations.TableInfo;
@@ -315,7 +314,17 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
 
     /**
      * Constructs a plan tree for evaluating the specified from-clause.
-     * TODO:  COMPLETE THE DOCUMENTATION
+     * If the given from clause is a base table, we return a FileScanNode,
+     * while if it is a derived table (subquery in the from clause), we
+     * recursively generate the plan of the subquery itself, with a
+     * RenameNode at the root of the tree. In the case that the from
+     * clause is an outer join, we check to see if we can apply any of the
+     * overall conjuncts to the child nodes of the join, provided that
+     * such changes do not change the results of the query. Then, after
+     * making any necessary changes to improve efficiency, we add the
+     * two recursively generated child nodes into a NestedLoopJoinNode
+     * of the correct type.
+     *
      *
      * @param fromClause the select nodes that need to be joined.
      *
@@ -339,7 +348,6 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         Collection<Expression> conjuncts, HashSet<Expression> leafConjuncts)
         throws IOException {
 
-        // TODO:  IMPLEMENT.
         //        If you apply any conjuncts then make sure to add them to the
         //        leafConjuncts collection.
         //
@@ -349,8 +357,56 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         //        joins first, then focus on outer joins once you have the
         //        typical cases supported.
 
-        return null;
-    }
+        PlanNode finalNode = null;
+        // Simple FileScanNode for the Base Table case
+        if (fromClause.isBaseTable()){
+            TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
+            finalNode = new FileScanNode(tableInfo, null);
+        }
+        // Recursively call makePlan, with RenameNode for the Derived Table case
+        if (fromClause.isDerivedTable()){
+            SelectClause fromSelClause = fromClause.getSelectClause();
+            finalNode = new RenameNode(makePlan(fromSelClause, null),
+                    fromClause.getResultName());
+        }
+        if (fromClause.isOuterJoin()){
+            PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null).joinPlan;
+            PlanNode rightNode = makeJoinPlan(fromClause.getRightChild(), null).joinPlan;
+            // If this is left outer join, we check to see if we can push any conjuncts down to the
+            // left plan node.
+            if (fromClause.hasOuterJoinOnLeft() && !fromClause.hasOuterJoinOnRight()){
+                leftNode.prepare();
+                rightNode.prepare();
+                PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, leftNode.getSchema());
+                Expression leftPred = PredicateUtils.makePredicate(leafConjuncts);
+                // Only call prepare() if necessary
+                if (leftPred != null){
+                    PlanUtils.addPredicateToPlan(leftNode, leftPred);
+                    leftNode.prepare();
+                }
+            }
+            // If this is right outer join, we check to see if we can push any conjuncts down to the
+            // right plan node.
+            if (fromClause.hasOuterJoinOnRight() && !fromClause.hasOuterJoinOnLeft()){
+                leftNode.prepare();
+                rightNode.prepare();
+                PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, rightNode.getSchema());
+                Expression rightPred = PredicateUtils.makePredicate(leafConjuncts);
+                // Only call prepare() if necessary
+                if (rightPred != null){
+                    PlanUtils.addPredicateToPlan(rightNode, rightPred);
+                    rightNode.prepare();
+                }
+            }
+            finalNode = new NestedLoopJoinNode(leftNode, rightNode,
+                    fromClause.getJoinType(), fromClause.getComputedJoinExpr());
+            }
+            if (finalNode == null){
+                throw new IllegalArgumentException("From clause has unrecognized type");
+            }
+        finalNode.prepare();
+        return finalNode;
+        }
 
 
     /**
