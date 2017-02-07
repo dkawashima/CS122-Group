@@ -146,6 +146,41 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Supporting other query features, such as grouping/aggregation,
         // various kinds of subqueries, queries without a FROM clause, etc.,
         // can all be incorporated into this sketch relatively easily.
+        HashSet<Expression> conjuncts = new HashSet<Expression>();
+        Expression whereExp = selClause.getWhereExpr();
+        Expression havingExp = selClause.getHavingExpr();
+        // Add WHERE conjunct(s) for special handling
+        if (whereExp instanceof BooleanOperator) {
+            // A Boolean AND, OR, or NOT operation.
+            BooleanOperator bool = (BooleanOperator) whereExp;
+            // Split up Conjunct if this is an AND operation
+            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
+                for (int i = 0; i < bool.getNumTerms(); i++) {
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                }
+            } else {
+                PredicateUtils.collectConjuncts(whereExp, conjuncts);
+            }
+        } else {
+            PredicateUtils.collectConjuncts(whereExp, conjuncts);
+        }
+        // Add HAVING conjunct(s) for special handling
+        if (havingExp instanceof BooleanOperator) {
+            // A Boolean AND, OR, or NOT operation.
+            BooleanOperator bool = (BooleanOperator) havingExp;
+            // Split up Conjunct if this is an AND operation
+            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
+                for (int i = 0; i < bool.getNumTerms(); i++) {
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                }
+            } else {
+                PredicateUtils.collectConjuncts(havingExp, conjuncts);
+            }
+        } else {
+            PredicateUtils.collectConjuncts(havingExp, conjuncts);
+        }
+
+        JoinComponent optimal = makeJoinPlan(selClause.getFromClause(), conjuncts);
 
         return null;
     }
