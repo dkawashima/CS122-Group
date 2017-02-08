@@ -501,8 +501,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         PlanNode finalNode = null;
         // Simple FileScanNode for the Base Table case
         if (fromClause.isBaseTable()){
-            TableInfo tableInfo = storageManager.getTableManager().openTable(fromClause.getTableName());
-            finalNode = new FileScanNode(tableInfo, null);
+            finalNode = makeSimpleSelect(fromClause.getTableName(), null, null);
         }
         // Recursively call makePlan, with RenameNode for the Derived Table case
         if (fromClause.isDerivedTable()){
