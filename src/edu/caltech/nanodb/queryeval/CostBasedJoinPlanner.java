@@ -587,18 +587,50 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             joinPlans.put(leaf.leavesUsed, leaf);
 
         while (joinPlans.size() > 1) {
-            logger.debug("Current set of join-plans has " + joinPlans.size() +
-                " plans in it.");
-
             // This is the set of "next plans" we will generate.  Plans only
             // get stored if they are the first plan that joins together the
             // specified leaves, or if they are better than the current plan.
             HashMap<HashSet<PlanNode>, JoinComponent> nextJoinPlans =
-                new HashMap<>();
+                    new HashMap<>();
+            for (JoinComponent planN : joinPlans.values()) {
+                for (JoinComponent leaf : leafComponents) {
 
-            // TODO:  IMPLEMENT THE CODE THAT GENERATES OPTIMAL PLANS THAT
-            //        JOIN N + 1 LEAVES
+                    if (planN.leavesUsed.contains(leaf.joinPlan)) {
+                        continue;
+                    }
 
+                    HashSet<PlanNode> nextLeavesUsed = new HashSet<PlanNode> (planN.leavesUsed);
+                    nextLeavesUsed.addAll(leaf.leavesUsed);
+                    NestedLoopJoinNode nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
+                            JoinType.INNER, null);
+
+                    HashSet<Expression> conjunctsUnion = new HashSet<Expression> (planN.conjunctsUsed);
+                    conjunctsUnion.addAll(leaf.conjunctsUsed);
+                    HashSet<Expression> unusedConjuncts = new HashSet<Expression> (conjuncts);
+                    unusedConjuncts.removeAll(conjunctsUnion);
+                    HashSet<Expression> nextConjunctsUsed = new HashSet<Expression>();
+
+                    nextJoinPlan.prepare();
+                    PredicateUtils.findExprsUsingSchemas(unusedConjuncts, false, nextConjunctsUsed,
+                            nextJoinPlan.getSchema());
+                    Expression predicate = PredicateUtils.makePredicate(nextConjunctsUsed);
+                    // Only call prepare() if necessary
+                    if (predicate != null){
+                        PlanUtils.addPredicateToPlan(nextJoinPlan, predicate);
+                        nextJoinPlan.prepare();
+                    }
+                    nextConjunctsUsed.addAll(conjunctsUnion);
+                    JoinComponent planNext = new JoinComponent(nextJoinPlan, nextLeavesUsed, nextConjunctsUsed);
+                    float newCost = planNext.joinPlan.getCost().cpuCost;
+                    if (nextJoinPlans.keySet().contains(planNext.leavesUsed)) {
+                        if (newCost < nextJoinPlans.get(planNext.leavesUsed).joinPlan.getCost().cpuCost)
+                            nextJoinPlans.put(planNext.leavesUsed, planNext);
+                    }
+                    else{
+                        nextJoinPlans.put(planNext.leavesUsed, planNext);
+                    }
+                }
+            }
             // Now that we have generated all plans joining N leaves, time to
             // create all plans joining N + 1 leaves.
             joinPlans = nextJoinPlans;
