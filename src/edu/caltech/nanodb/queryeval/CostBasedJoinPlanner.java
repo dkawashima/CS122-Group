@@ -11,13 +11,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import edu.caltech.nanodb.expressions.BooleanOperator;
-import edu.caltech.nanodb.expressions.PredicateUtils;
+import edu.caltech.nanodb.expressions.*;
 import edu.caltech.nanodb.plannodes.*;
+import edu.caltech.nanodb.queryast.SelectValue;
 import edu.caltech.nanodb.relations.JoinType;
 import org.apache.log4j.Logger;
 
-import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.queryast.FromClause;
 import edu.caltech.nanodb.queryast.SelectClause;
 import edu.caltech.nanodb.relations.TableInfo;
@@ -146,41 +145,148 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Supporting other query features, such as grouping/aggregation,
         // various kinds of subqueries, queries without a FROM clause, etc.,
         // can all be incorporated into this sketch relatively easily.
-        HashSet<Expression> conjuncts = new HashSet<Expression>();
-        Expression whereExp = selClause.getWhereExpr();
-        Expression havingExp = selClause.getHavingExpr();
-        // Add WHERE conjunct(s) for special handling
-        if (whereExp instanceof BooleanOperator) {
-            // A Boolean AND, OR, or NOT operation.
-            BooleanOperator bool = (BooleanOperator) whereExp;
-            // Split up Conjunct if this is an AND operation
-            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
-                for (int i = 0; i < bool.getNumTerms(); i++) {
-                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
-                }
-            } else {
-                PredicateUtils.collectConjuncts(whereExp, conjuncts);
-            }
-        } else {
-            PredicateUtils.collectConjuncts(whereExp, conjuncts);
-        }
-        // Add HAVING conjunct(s) for special handling
-        if (havingExp instanceof BooleanOperator) {
-            // A Boolean AND, OR, or NOT operation.
-            BooleanOperator bool = (BooleanOperator) havingExp;
-            // Split up Conjunct if this is an AND operation
-            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
-                for (int i = 0; i < bool.getNumTerms(); i++) {
-                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
-                }
-            } else {
-                PredicateUtils.collectConjuncts(havingExp, conjuncts);
-            }
-        } else {
-            PredicateUtils.collectConjuncts(havingExp, conjuncts);
+
+        if (enclosingSelects != null && !enclosingSelects.isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "Not implemented:  enclosing queries");
         }
 
-        JoinComponent optimal = makeJoinPlan(selClause.getFromClause(), conjuncts);
+        // Processing GROUP BY expressions and Aggregates
+        AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
+        processor.setErrorCheck(1);
+        Expression whereExpr = selClause.getWhereExpr();
+        if (whereExpr != null) {
+            Expression new_exp = whereExpr.traverse(processor);
+        }
+        if (selClause.getFromClause() != null && selClause.getFromClause().isJoinExpr()) {
+            Expression onExpr = selClause.getFromClause().getOnExpression();
+            if (onExpr != null){
+                Expression new_exp = onExpr.traverse(processor);
+            }
+        }
+
+        processor.setErrorCheck(0);
+        for (SelectValue sv : selClause.getSelectValues()) {
+            // Skip select-values that aren't expressions
+            if (!sv.isExpression())
+                continue;
+            Expression e = sv.getExpression();
+            Expression new_exp = sv.getExpression().traverse(processor);
+            sv.setExpression(new_exp);
+
+        }
+        Expression havingExpr = selClause.getHavingExpr();
+        if (havingExpr != null) {
+            Expression new_exp = havingExpr.traverse(processor);
+            selClause.setHavingExpr(new_exp);
+        }
+
+        // Handle NULL From Clause case
+        FromClause fromClause = selClause.getFromClause();
+        if (fromClause == null) {
+            ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
+            projNode.prepare();
+            return projNode;
+        }
+
+        HashSet<Expression> conjuncts = new HashSet<Expression>();
+        // Add WHERE conjunct(s) for special handling
+        if (whereExpr instanceof BooleanOperator) {
+            // A Boolean AND, OR, or NOT operation.
+            BooleanOperator bool = (BooleanOperator) whereExpr;
+            // Split up Conjunct if this is an AND operation
+            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
+                for (int i = 0; i < bool.getNumTerms(); i++) {
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                }
+            } else {
+                PredicateUtils.collectConjuncts(whereExpr, conjuncts);
+            }
+        } else {
+            PredicateUtils.collectConjuncts(whereExpr, conjuncts);
+        }
+        // Add HAVING conjunct(s) for special handling
+        if (havingExpr instanceof BooleanOperator) {
+            // A Boolean AND, OR, or NOT operation.
+            BooleanOperator bool = (BooleanOperator) havingExpr;
+            // Split up Conjunct if this is an AND operation
+            if (bool.getType() == BooleanOperator.Type.AND_EXPR){
+                for (int i = 0; i < bool.getNumTerms(); i++) {
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                }
+            } else {
+                PredicateUtils.collectConjuncts(havingExpr, conjuncts);
+            }
+        } else {
+            PredicateUtils.collectConjuncts(havingExpr, conjuncts);
+        }
+
+        // Create optimal node for FROM clause
+        JoinComponent optimal = makeJoinPlan(fromClause, conjuncts);
+        conjuncts.removeAll(optimal.conjunctsUsed);
+        PlanNode curNode = optimal.joinPlan;
+        if (conjuncts.size() > 0) {
+            Expression lastPred = PredicateUtils.makePredicate(conjuncts);
+            curNode = new SimpleFilterNode(optimal.joinPlan, lastPred);
+            curNode.prepare();
+
+            PlanNode finalNode;
+            if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
+                HashedGroupAggregateNode aggregateNode;
+                if (processor.getAggFunct() == null) {
+                    HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                    aggregateNode = new HashedGroupAggregateNode(curNode,
+                            selClause.getGroupByExprs(), empty_agg);
+                } else {
+                    aggregateNode = new HashedGroupAggregateNode(curNode,
+                            selClause.getGroupByExprs(), processor.getAggFunct());
+                }
+                aggregateNode.prepare();
+                if (selClause.getHavingExpr() != null) {
+                    SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                    havingNode.prepare();
+                    finalNode = havingNode;
+                } else {
+                    finalNode = aggregateNode;
+                }
+            } else {
+                finalNode = curNode;
+            }
+            if (!selClause.isTrivialProject()) {
+                ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
+                projNode.prepare();
+                if (!selClause.getOrderByExprs().isEmpty()) {
+                    SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
+                return projNode;
+            } else {
+                if (!selClause.getOrderByExprs().isEmpty()) {
+                    SortNode orderByNode = new SortNode(finalNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
+            }
+        } else { // No predicates to apply in this node, all were previously applied
+            if (!selClause.isTrivialProject()) {
+                ProjectNode projNode = new ProjectNode(curNode, selClause.getSelectValues());
+                projNode.prepare();
+                if (!selClause.getOrderByExprs().isEmpty()) {
+                    SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
+                return projNode;
+            } else {
+                if (!selClause.getOrderByExprs().isEmpty()) {
+                    SortNode orderByNode = new SortNode(curNode, selClause.getOrderByExprs());
+                    orderByNode.prepare();
+                    return orderByNode;
+                }
+            }
+        }
+
 
         return null;
     }
