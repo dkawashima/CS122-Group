@@ -124,7 +124,6 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
     public PlanNode makePlan(SelectClause selClause,
         List<SelectClause> enclosingSelects) throws IOException {
 
-        // TODO:  Implement!
         //
         // This is a very rough sketch of how this function will work,
         // focusing mainly on join planning:
