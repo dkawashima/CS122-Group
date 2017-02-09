@@ -547,6 +547,13 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             SelectClause fromSelClause = fromClause.getSelectClause();
             finalNode = new RenameNode(makePlan(fromSelClause, null),
                     fromClause.getResultName());
+            finalNode.prepare();
+            PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
+            Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
+            if (leafPred != null){
+                finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
+                finalNode.prepare();
+            }
         }
         if (fromClause.isJoinExpr() && fromClause.isOuterJoin()){
             PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null).joinPlan;
@@ -579,12 +586,10 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             }
             finalNode = new NestedLoopJoinNode(leftNode, rightNode,
                     fromClause.getJoinType(), fromClause.getComputedJoinExpr());
+            finalNode.prepare();
             }
             if (finalNode == null){
                 throw new IllegalArgumentException("From clause has unrecognized type");
-            }
-            if (!fromClause.isBaseTable()){
-                finalNode.prepare();
             }
         return finalNode;
         }
