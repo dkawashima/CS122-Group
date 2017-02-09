@@ -281,8 +281,31 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 return finalNode;
             }
         } else { // No predicates to apply in this node, all were previously applied
+            PlanNode finalNode;
+            if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
+                HashedGroupAggregateNode aggregateNode;
+                if (processor.getAggFunct() == null) {
+                    HashMap<String, FunctionCall> empty_agg = new HashMap<String, FunctionCall>();
+                    aggregateNode = new HashedGroupAggregateNode(curNode,
+                            selClause.getGroupByExprs(), empty_agg);
+                } else {
+                    aggregateNode = new HashedGroupAggregateNode(curNode,
+                            selClause.getGroupByExprs(), processor.getAggFunct());
+                }
+                aggregateNode.prepare();
+                if (havingConjuncts.size() > 0) {
+                    Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
+                    SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
+                    havingNode.prepare();
+                    finalNode = havingNode;
+                } else {
+                    finalNode = aggregateNode;
+                }
+            } else {
+                finalNode = curNode;
+            }
             if (!selClause.isTrivialProject()) {
-                ProjectNode projNode = new ProjectNode(curNode, selClause.getSelectValues());
+                ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
                 projNode.prepare();
                 if (!selClause.getOrderByExprs().isEmpty()) {
                     SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
@@ -292,11 +315,11 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 return projNode;
             } else {
                 if (!selClause.getOrderByExprs().isEmpty()) {
-                    SortNode orderByNode = new SortNode(curNode, selClause.getOrderByExprs());
+                    SortNode orderByNode = new SortNode(finalNode, selClause.getOrderByExprs());
                     orderByNode.prepare();
                     return orderByNode;
                 }
-                return curNode;
+                return finalNode;
             }
         }
     }
@@ -560,7 +583,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             if (finalNode == null){
                 throw new IllegalArgumentException("From clause has unrecognized type");
             }
-        finalNode.prepare();
+            if (!fromClause.isBaseTable()){
+                finalNode.prepare();
+            }
         return finalNode;
         }
 
