@@ -188,7 +188,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             return projNode;
         }
 
-        HashSet<Expression> conjuncts = new HashSet<Expression>();
+        HashSet<Expression> whereConjuncts = new HashSet<Expression>();
         // Add WHERE conjunct(s) for special handling
         if (whereExpr instanceof BooleanOperator) {
             // A Boolean AND, OR, or NOT operation.
@@ -196,14 +196,16 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             // Split up Conjunct if this is an AND operation
             if (bool.getType() == BooleanOperator.Type.AND_EXPR){
                 for (int i = 0; i < bool.getNumTerms(); i++) {
-                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), whereConjuncts);
                 }
             } else {
-                PredicateUtils.collectConjuncts(whereExpr, conjuncts);
+                PredicateUtils.collectConjuncts(whereExpr, whereConjuncts);
             }
         } else {
-            PredicateUtils.collectConjuncts(whereExpr, conjuncts);
+            PredicateUtils.collectConjuncts(whereExpr, whereConjuncts);
         }
+
+        HashSet<Expression> havingConjuncts = new HashSet<Expression>();
         // Add HAVING conjunct(s) for special handling
         if (havingExpr instanceof BooleanOperator) {
             // A Boolean AND, OR, or NOT operation.
@@ -211,23 +213,29 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             // Split up Conjunct if this is an AND operation
             if (bool.getType() == BooleanOperator.Type.AND_EXPR){
                 for (int i = 0; i < bool.getNumTerms(); i++) {
-                    PredicateUtils.collectConjuncts(bool.getTerm(i), conjuncts);
+                    PredicateUtils.collectConjuncts(bool.getTerm(i), havingConjuncts);
                 }
             } else {
-                PredicateUtils.collectConjuncts(havingExpr, conjuncts);
+                PredicateUtils.collectConjuncts(havingExpr, havingConjuncts);
             }
         } else {
-            PredicateUtils.collectConjuncts(havingExpr, conjuncts);
+            PredicateUtils.collectConjuncts(havingExpr, havingConjuncts);
         }
 
         // Create optimal node for FROM clause
-        JoinComponent optimal = makeJoinPlan(fromClause, conjuncts);
-        conjuncts.removeAll(optimal.conjunctsUsed);
+        HashSet<Expression> finalConjuncts = new HashSet<Expression>(havingConjuncts);
+        finalConjuncts.addAll(whereConjuncts);
+        JoinComponent optimal = makeJoinPlan(fromClause, finalConjuncts);
+        whereConjuncts.removeAll(optimal.conjunctsUsed);
+        havingConjuncts.removeAll(optimal.conjunctsUsed);
+        finalConjuncts.removeAll(optimal.conjunctsUsed);
         PlanNode curNode = optimal.joinPlan;
-        if (conjuncts.size() > 0) {
-            Expression lastPred = PredicateUtils.makePredicate(conjuncts);
-            curNode = new SimpleFilterNode(optimal.joinPlan, lastPred);
-            curNode.prepare();
+        if (finalConjuncts.size() > 0) {
+            if (whereConjuncts.size() > 0){
+                Expression wherePred = PredicateUtils.makePredicate(whereConjuncts);
+                curNode = new SimpleFilterNode(optimal.joinPlan, wherePred);
+                curNode.prepare();
+            }
 
             PlanNode finalNode;
             if (processor.getAggFunct() != null || !selClause.getGroupByExprs().isEmpty()) {
@@ -241,8 +249,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                             selClause.getGroupByExprs(), processor.getAggFunct());
                 }
                 aggregateNode.prepare();
-                if (selClause.getHavingExpr() != null) {
-                    SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, selClause.getHavingExpr());
+                if (havingConjuncts.size() > 0) {
+                    Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
+                    SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
                     havingNode.prepare();
                     finalNode = havingNode;
                 } else {
