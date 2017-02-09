@@ -226,10 +226,13 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         HashSet<Expression> finalConjuncts = new HashSet<Expression>(havingConjuncts);
         finalConjuncts.addAll(whereConjuncts);
         JoinComponent optimal = makeJoinPlan(fromClause, finalConjuncts);
+
         whereConjuncts.removeAll(optimal.conjunctsUsed);
         havingConjuncts.removeAll(optimal.conjunctsUsed);
         finalConjuncts.removeAll(optimal.conjunctsUsed);
         PlanNode curNode = optimal.joinPlan;
+
+
         if (finalConjuncts.size() > 0) {
             if (whereConjuncts.size() > 0){
                 Expression wherePred = PredicateUtils.makePredicate(whereConjuncts);
@@ -275,6 +278,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     orderByNode.prepare();
                     return orderByNode;
                 }
+                return finalNode;
             }
         } else { // No predicates to apply in this node, all were previously applied
             if (!selClause.isTrivialProject()) {
@@ -292,11 +296,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     orderByNode.prepare();
                     return orderByNode;
                 }
+                return curNode;
             }
         }
-
-
-        return null;
     }
 
 
@@ -510,6 +512,12 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Simple FileScanNode for the Base Table case
         if (fromClause.isBaseTable()){
             finalNode = makeSimpleSelect(fromClause.getTableName(), null, null);
+            PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
+            Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
+            if (leafPred != null){
+                finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
+                finalNode.prepare();
+            }
         }
         // Recursively call makePlan, with RenameNode for the Derived Table case
         if (fromClause.isDerivedTable()){
@@ -517,7 +525,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             finalNode = new RenameNode(makePlan(fromSelClause, null),
                     fromClause.getResultName());
         }
-        if (fromClause.isOuterJoin()){
+        if (fromClause.isJoinExpr() && fromClause.isOuterJoin()){
             PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null).joinPlan;
             PlanNode rightNode = makeJoinPlan(fromClause.getRightChild(), null).joinPlan;
             // If this is left outer join, we check to see if we can push any conjuncts down to the
@@ -529,7 +537,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression leftPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (leftPred != null){
-                    PlanUtils.addPredicateToPlan(leftNode, leftPred);
+                    leftNode = PlanUtils.addPredicateToPlan(leftNode, leftPred);
                     leftNode.prepare();
                 }
             }
@@ -542,7 +550,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression rightPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (rightPred != null){
-                    PlanUtils.addPredicateToPlan(rightNode, rightPred);
+                    rightNode = PlanUtils.addPredicateToPlan(rightNode, rightPred);
                     rightNode.prepare();
                 }
             }
@@ -610,7 +618,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
 
                     HashSet<PlanNode> nextLeavesUsed = new HashSet<PlanNode> (planN.leavesUsed);
                     nextLeavesUsed.addAll(leaf.leavesUsed);
-                    NestedLoopJoinNode nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
+                    PlanNode nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
                             JoinType.INNER, null);
 
                     HashSet<Expression> conjunctsUnion = new HashSet<Expression> (planN.conjunctsUsed);
@@ -625,17 +633,18 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression predicate = PredicateUtils.makePredicate(nextConjunctsUsed);
                     // Only call prepare() if necessary
                     if (predicate != null){
-                        PlanUtils.addPredicateToPlan(nextJoinPlan, predicate);
+                        nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
+                                JoinType.INNER, predicate);
                         nextJoinPlan.prepare();
                     }
+
                     nextConjunctsUsed.addAll(conjunctsUnion);
                     JoinComponent planNext = new JoinComponent(nextJoinPlan, nextLeavesUsed, nextConjunctsUsed);
                     float newCost = planNext.joinPlan.getCost().cpuCost;
                     if (nextJoinPlans.keySet().contains(planNext.leavesUsed)) {
                         if (newCost < nextJoinPlans.get(planNext.leavesUsed).joinPlan.getCost().cpuCost)
                             nextJoinPlans.put(planNext.leavesUsed, planNext);
-                    }
-                    else{
+                    } else {
                         nextJoinPlans.put(planNext.leavesUsed, planNext);
                     }
                 }
