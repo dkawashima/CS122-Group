@@ -61,6 +61,8 @@ public class SubqueryPlanner {
 
     private Planner parentPlanner;
 
+    private Environment subqueryEnvironment;
+
     /**
      * Constructor that takes as an argument a Planner. 
      * 
@@ -71,6 +73,12 @@ public class SubqueryPlanner {
     public SubqueryPlanner(Planner parentPlanner) {
         this.parentPlanner = parentPlanner;
         expressions_to_plan = new ArrayList<Expression>();
+        this.subqueryEnvironment = new Environment();
+    }
+
+    public void reset() {
+        expressions_to_plan = new ArrayList<Expression>();
+        this.subqueryEnvironment = new Environment();
     }
 
     /**
@@ -85,15 +93,26 @@ public class SubqueryPlanner {
      */    
 
     // TODO make private after testing
-    public void planSubqueryOperatorExpression(Expression e) throws IOException{
+    public void planSubqueryOperatorExpression(Expression e, List<SelectClause> enclosingSelects, PlanNode parentNode)
+            throws IOException{
         if (e instanceof ScalarSubquery) {
             ScalarSubquery sub = (ScalarSubquery) e;
-            sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
+            PlanNode subqueryNode = parentPlanner.makePlan(sub.getSubquery(), enclosingSelects);
+            subqueryNode.addParentEnvironmentToPlanTree(parentNode.getEnvironment());
+            subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
+            subqueryNode.prepare();
+            sub.setSubqueryPlan(subqueryNode);
+            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
 
         }
         if (e instanceof InSubqueryOperator){
             InSubqueryOperator sub = (InSubqueryOperator) e;
-            sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
+            PlanNode subqueryNode = parentPlanner.makePlan(sub.getSubquery(), enclosingSelects);
+            subqueryNode.addParentEnvironmentToPlanTree(parentNode.getEnvironment());
+            subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
+            subqueryNode.prepare();
+            sub.setSubqueryPlan(subqueryNode);
+            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
 
             // TODO
             // ALso might have to plan the expr in InSubqueryOperator, but i think the 
@@ -102,7 +121,12 @@ public class SubqueryPlanner {
         }
         if (e instanceof ExistsOperator){
             ExistsOperator sub = (ExistsOperator) e;
-            sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
+            PlanNode subqueryNode = parentPlanner.makePlan(sub.getSubquery(), enclosingSelects);
+            subqueryNode.addParentEnvironmentToPlanTree(parentNode.getEnvironment());
+            subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
+            subqueryNode.prepare();
+            sub.setSubqueryPlan(subqueryNode);
+            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
 
         }
 
@@ -133,7 +157,7 @@ public class SubqueryPlanner {
 
         // Subqueries as select values 
         for (SelectValue sv : selClause.getSelectValues()) {
-            planSubqueryOperatorExpression(sv.getExpression());
+            planSubqueryOperatorExpression(sv.getExpression(), null, null);
 
             // TODO delete
             // Below is same as above^ 
@@ -157,7 +181,7 @@ public class SubqueryPlanner {
             for(int i = 0; i < expressions_to_plan.size(); i++) {
                 System.out.println(expressions_to_plan.get(i));
 
-                planSubqueryOperatorExpression(expressions_to_plan.get(i));
+                planSubqueryOperatorExpression(expressions_to_plan.get(i), null, null);
 
             }
             expressions_to_plan.clear();
@@ -174,7 +198,7 @@ public class SubqueryPlanner {
             for(int i = 0; i < expressions_to_plan.size(); i++) {
                 System.out.println(expressions_to_plan.get(i));
 
-                planSubqueryOperatorExpression(expressions_to_plan.get(i));
+                planSubqueryOperatorExpression(expressions_to_plan.get(i), null, null);
 
             }
             expressions_to_plan.clear();
@@ -183,6 +207,28 @@ public class SubqueryPlanner {
 
     }
 
+    public void planSubqueryInExpression(Expression e, List<SelectClause> enclosingSelects,
+                                                             PlanNode parentNode) throws IOException{
+        SubqueryPlannerExpressionProcessor processor = new SubqueryPlannerExpressionProcessor();
+
+        e.traverse(processor);
+
+        System.out.println("Create plan nodes in this expression");
+
+        for(int i = 0; i < expressions_to_plan.size(); i++) {
+            System.out.println(expressions_to_plan.get(i));
+
+            planSubqueryOperatorExpression(expressions_to_plan.get(i),
+                    enclosingSelects, parentNode);
+
+        }
+        if (expressions_to_plan.size() > 0){
+            parentNode.setEnvironment(subqueryEnvironment);
+            parentNode.prepare();
+        }
+        this.reset();
+
+    }
 
 
     // private Expression planSubquery(Expression e) throws IOException {

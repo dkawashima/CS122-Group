@@ -152,16 +152,23 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
     
         // First, check 
         SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
-        subqueryPlanner.planAllSubqueriesInSelectClause(selClause, enclosingSelects);
+        //subqueryPlanner.planAllSubqueriesInSelectClause(selClause, enclosingSelects);
 
+        List <SelectClause> enclosingSelectsIncludingThis;
+        if (enclosingSelects != null && !enclosingSelects.isEmpty()){
+            enclosingSelectsIncludingThis = new ArrayList<SelectClause>(enclosingSelects);
+        } else {
+            enclosingSelectsIncludingThis = new ArrayList<SelectClause>();
+        }
+        enclosingSelectsIncludingThis.add(selClause);
 
-        if (enclosingSelects != null && !enclosingSelects.isEmpty()) {
+        /*if (enclosingSelects != null && !enclosingSelects.isEmpty()) {
 
             System.out.println("This is a correlated subquery (inside).");
 
             throw new UnsupportedOperationException(
                     "Not implemented:  enclosing queries");
-        }
+        }*/
 
         // Processing GROUP BY expressions and Aggregates
         AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
@@ -238,7 +245,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Create optimal node for FROM clause
         HashSet<Expression> finalConjuncts = new HashSet<Expression>(havingConjuncts);
         finalConjuncts.addAll(whereConjuncts);
-        JoinComponent optimal = makeJoinPlan(fromClause, finalConjuncts);
+        JoinComponent optimal = makeJoinPlan(fromClause, finalConjuncts, enclosingSelectsIncludingThis);
 
         whereConjuncts.removeAll(optimal.conjunctsUsed);
         havingConjuncts.removeAll(optimal.conjunctsUsed);
@@ -251,6 +258,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression wherePred = PredicateUtils.makePredicate(whereConjuncts);
                 curNode = new SimpleFilterNode(optimal.joinPlan, wherePred);
                 curNode.prepare();
+                subqueryPlanner.planSubqueryInExpression(wherePred, enclosingSelectsIncludingThis,
+                        curNode);
             }
 
             PlanNode finalNode;
@@ -269,6 +278,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
                     SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
                     havingNode.prepare();
+                    subqueryPlanner.planSubqueryInExpression(havingPred, enclosingSelectsIncludingThis,
+                            havingNode);
                     finalNode = havingNode;
                 } else {
                     finalNode = aggregateNode;
@@ -277,8 +288,15 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 finalNode = curNode;
             }
             if (!selClause.isTrivialProject()) {
+                System.out.println("Info on ProjectNode in Subquery");
+                System.out.println(selClause.getSelectValues().toString());
+                System.out.println(finalNode.toString());
                 ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
                 projNode.prepare();
+                for (SelectValue sv : selClause.getSelectValues()) {
+                    subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
+                            projNode);
+                }
                 if (!selClause.getOrderByExprs().isEmpty()) {
                     SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
                     orderByNode.prepare();
@@ -310,6 +328,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
                     SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
                     havingNode.prepare();
+                    subqueryPlanner.planSubqueryInExpression(havingPred, enclosingSelectsIncludingThis,
+                            havingNode);
                     finalNode = havingNode;
                 } else {
                     finalNode = aggregateNode;
@@ -319,6 +339,10 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             }
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
+                for (SelectValue sv : selClause.getSelectValues()) {
+                    subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
+                            projNode);
+                }
                 projNode.prepare();
                 if (!selClause.getOrderByExprs().isEmpty()) {
                     SortNode orderByNode = new SortNode(projNode, selClause.getOrderByExprs());
@@ -351,7 +375,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      * @throws IOException if an IO error occurs during planning.
      */
     private JoinComponent makeJoinPlan(FromClause fromClause,
-        Collection<Expression> extraConjuncts) throws IOException {
+        Collection<Expression> extraConjuncts, List<SelectClause> enclosingSelects) throws IOException {
 
         // These variables receive the leaf-clauses and join conjuncts found
         // from scanning the sub-clauses.  Initially, we put the extra conjuncts
@@ -378,7 +402,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
 
         logger.debug("Generating plans for all leaves");
         ArrayList<JoinComponent> leafComponents = generateLeafJoinComponents(
-            leafFromClauses, roConjuncts);
+            leafFromClauses, roConjuncts, enclosingSelects);
 
         // Print out the results, for debugging purposes.
         if (logger.isDebugEnabled()) {
@@ -391,7 +415,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Build up the full query-plan using a dynamic programming approach.
 
         JoinComponent optimalJoin =
-            generateOptimalJoin(leafComponents, roConjuncts);
+            generateOptimalJoin(leafComponents, roConjuncts, enclosingSelects);
 
         PlanNode plan = optimalJoin.joinPlan;
         logger.info("Optimal join plan generated:\n" +
@@ -479,7 +503,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *         schema loaded, for some reason
      */
     private ArrayList<JoinComponent> generateLeafJoinComponents(
-        Collection<FromClause> leafFromClauses, Collection<Expression> conjuncts)
+        Collection<FromClause> leafFromClauses, Collection<Expression> conjuncts,
+        List<SelectClause> enclosingSelects)
         throws IOException {
 
         // Create a subplan for every single leaf FROM-clause, and prepare the
@@ -489,7 +514,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             HashSet<Expression> leafConjuncts = new HashSet<>();
 
             PlanNode leafPlan =
-                makeLeafPlan(leafClause, conjuncts, leafConjuncts);
+                makeLeafPlan(leafClause, conjuncts, leafConjuncts, enclosingSelects);
 
             JoinComponent leaf = new JoinComponent(leafPlan, leafConjuncts);
             leafComponents.add(leaf);
@@ -532,7 +557,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *         unrecognized type.
      */
     private PlanNode makeLeafPlan(FromClause fromClause,
-        Collection<Expression> conjuncts, HashSet<Expression> leafConjuncts)
+        Collection<Expression> conjuncts, HashSet<Expression> leafConjuncts,
+                                  List<SelectClause> enclosingSelects)
         throws IOException {
 
         //        If you apply any conjuncts then make sure to add them to the
@@ -545,14 +571,40 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         //        typical cases supported.
 
         PlanNode finalNode = null;
+        SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
         // Simple FileScanNode for the Base Table case
         if (fromClause.isBaseTable()){
-            finalNode = makeSimpleSelect(fromClause.getTableName(), null, null);
-            PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
-            Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
-            if (leafPred != null){
-                finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
-                finalNode.prepare();
+            if (fromClause.getResultName() != fromClause.getTableName()){
+                PlanNode initNode = makeSimpleSelect(fromClause.getTableName(), null, null);
+                PlanNode tempNode = new RenameNode(
+                        makeSimpleSelect(fromClause.getTableName(), null, null),
+                        fromClause.getResultName());
+                tempNode.prepare();
+                PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, tempNode.getSchema());
+                Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
+                System.out.println("LeafPred might be NULL:");
+                if (leafPred != null){
+                    System.out.println("LeafPred:");
+                    System.out.println(leafPred.toString());
+                    finalNode = new SimpleFilterNode(tempNode, leafPred);
+                    finalNode.prepare();
+                    subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
+                            finalNode);
+                    //finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
+                    finalNode.prepare();
+                } else {
+                    finalNode = tempNode;
+                }
+            } else {
+                finalNode = makeSimpleSelect(fromClause.getTableName(), null, null);
+                PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
+                Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
+                if (leafPred != null) {
+                    subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
+                            finalNode);
+                    finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
+                    finalNode.prepare();
+                }
             }
         }
         // Recursively call makePlan, with RenameNode for the Derived Table case
@@ -564,13 +616,17 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
             Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
             if (leafPred != null){
+                subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
+                        finalNode);
                 finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
                 finalNode.prepare();
             }
         }
         if (fromClause.isJoinExpr() && fromClause.isOuterJoin()){
-            PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null).joinPlan;
-            PlanNode rightNode = makeJoinPlan(fromClause.getRightChild(), null).joinPlan;
+            PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null,
+                    null).joinPlan;
+            PlanNode rightNode = makeJoinPlan(fromClause.getRightChild(), null,
+                    null).joinPlan;
             // If this is left outer join, we check to see if we can push any conjuncts down to the
             // left plan node.
             if (fromClause.hasOuterJoinOnLeft() && !fromClause.hasOuterJoinOnRight()){
@@ -580,6 +636,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression leftPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (leftPred != null){
+                    subqueryPlanner.planSubqueryInExpression(leftPred, enclosingSelects,
+                            leftNode);
                     leftNode = PlanUtils.addPredicateToPlan(leftNode, leftPred);
                     leftNode.prepare();
                 }
@@ -593,6 +651,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression rightPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (rightPred != null){
+                    subqueryPlanner.planSubqueryInExpression(rightPred, enclosingSelects,
+                            leftNode);
                     rightNode = PlanUtils.addPredicateToPlan(rightNode, rightPred);
                     rightNode.prepare();
                 }
@@ -627,7 +687,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *         components together in an optimal way.
      */
     private JoinComponent generateOptimalJoin(
-        ArrayList<JoinComponent> leafComponents, Set<Expression> conjuncts) {
+        ArrayList<JoinComponent> leafComponents, Set<Expression> conjuncts,
+        List<SelectClause> enclosingSelects) throws IOException {
 
         // This object maps a collection of leaf-plans (represented as a
         // hash-set) to the optimal join-plan for that collection of leaf plans.
@@ -642,6 +703,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // optimal way to join all N leaves.  Go Go Gadget Dynamic Programming!
         HashMap<HashSet<PlanNode>, JoinComponent> joinPlans = new HashMap<>();
 
+
+        SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
         // Initially populate joinPlans with just the N leaf plans.
         for (JoinComponent leaf : leafComponents)
             joinPlans.put(leaf.leavesUsed, leaf);
@@ -676,8 +739,11 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression predicate = PredicateUtils.makePredicate(nextConjunctsUsed);
                     // Only call prepare() if necessary
                     if (predicate != null){
-                        nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
-                                JoinType.INNER, predicate);
+                        subqueryPlanner.planSubqueryInExpression(predicate, enclosingSelects,
+                                nextJoinPlan);
+                        /*nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
+                                JoinType.INNER, predicate);*/
+                        nextJoinPlan = PlanUtils.addPredicateToPlan(nextJoinPlan, predicate);
                         nextJoinPlan.prepare();
                     }
 
