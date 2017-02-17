@@ -401,6 +401,8 @@ setup_testHaving = \
 #
 
 setup_testExists = \
+    drop table if exists test_exists_1; \
+    drop table if exists test_exists_2;\
     CREATE TABLE test_exists_1 ( a INTEGER ); \
     CREATE TABLE test_exists_2 ( b INTEGER ); \
     INSERT INTO test_exists_1 VALUES (1); \

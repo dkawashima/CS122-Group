@@ -145,7 +145,20 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // various kinds of subqueries, queries without a FROM clause, etc.,
         // can all be incorporated into this sketch relatively easily.
 
+        System.out.println("-----------\nmakePlan for:");
+        System.out.println(selClause.toString());
+        System.out.println("");
+
+    
+        // First, check 
+        SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
+        subqueryPlanner.planAllSubqueriesInSelectClause(selClause, enclosingSelects);
+
+
         if (enclosingSelects != null && !enclosingSelects.isEmpty()) {
+
+            System.out.println("This is a correlated subquery (inside).");
+
             throw new UnsupportedOperationException(
                     "Not implemented:  enclosing queries");
         }
