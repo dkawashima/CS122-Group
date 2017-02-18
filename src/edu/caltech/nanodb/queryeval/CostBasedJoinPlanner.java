@@ -205,6 +205,10 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         if (fromClause == null) {
             ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
             projNode.prepare();
+            for (SelectValue sv : selClause.getSelectValues()) {
+                subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
+                        projNode);
+            }
             return projNode;
         }
 
