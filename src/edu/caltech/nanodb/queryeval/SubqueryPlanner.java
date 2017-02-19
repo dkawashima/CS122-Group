@@ -32,18 +32,20 @@ public class SubqueryPlanner {
 
 
     public class SubqueryPlannerExpressionProcessor implements ExpressionProcessor {
-        // private int errorCheck;
+        private int errorCheck = 0;
 
         public void enter(Expression e){};
-
-        // public void setErrorCheck (int err){
-        //     errorCheck = err;
-        // }
+        public void setErrorCheck (int err){
+            errorCheck = err;
+        }
 
         public Expression leave(Expression e) {
             // This function never changes the node that is traversed.
 
             if(e instanceof SubqueryOperator) {
+                if (errorCheck == 1){
+                    throw new IllegalArgumentException("Cannot contain subqueries in ORDER BY/GROUP BY clauses");
+                }
                 expressions_to_plan.add(e);
             }
             // This does not work because leave() is not supposed to throw IOExcpetion
@@ -83,18 +85,23 @@ public class SubqueryPlanner {
 
     /**
      * Takes an Expression and if it is a SubqueryOperator type, create its
-     * subqueryPlan.
+     * subqueryPlan. Correctly organizes environments to support correlated
+     * subqueries.
      *
      * @param e an expression
+     *
+     * @param enclosingSelects a list of enclosing select clauses that this subquery
+     * resides inside of. Is passed to subsequent makePlan function.
+     *
+     * @param parentNode the PlanNode from which this subquery processes its tuples,
+     * helps set up environments for correlated evaluation.
      *
      * @return Nothing
      *
      * @throws 
-     */    
-
-    // TODO make private after testing
-    public void planSubqueryOperatorExpression(Expression e, List<SelectClause> enclosingSelects, PlanNode parentNode)
-            throws IOException{
+     */
+    private void planSubqueryOperatorExpression(Expression e, List<SelectClause> enclosingSelects, PlanNode parentNode)
+            throws IOException {
         if (e instanceof ScalarSubquery) {
             ScalarSubquery sub = (ScalarSubquery) e;
             PlanNode subqueryNode = parentPlanner.makePlan(sub.getSubquery(), enclosingSelects);
@@ -102,8 +109,6 @@ public class SubqueryPlanner {
             subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
             subqueryNode.prepare();
             sub.setSubqueryPlan(subqueryNode);
-            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
-
         }
         if (e instanceof InSubqueryOperator){
             InSubqueryOperator sub = (InSubqueryOperator) e;
@@ -112,12 +117,6 @@ public class SubqueryPlanner {
             subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
             subqueryNode.prepare();
             sub.setSubqueryPlan(subqueryNode);
-            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
-
-            // TODO
-            // ALso might have to plan the expr in InSubqueryOperator, but i think the 
-            // traverse in planAllSubqueriesInSelectClause does that already
-
         }
         if (e instanceof ExistsOperator){
             ExistsOperator sub = (ExistsOperator) e;
@@ -126,8 +125,6 @@ public class SubqueryPlanner {
             subqueryNode.addParentEnvironmentToPlanTree(subqueryEnvironment);
             subqueryNode.prepare();
             sub.setSubqueryPlan(subqueryNode);
-            //sub.setSubqueryPlan(parentPlanner.makePlan(sub.getSubquery(), null));
-
         }
 
     }
@@ -142,7 +139,8 @@ public class SubqueryPlanner {
      * @return Nothing
      *
      * @throws 
-     */   
+     */
+    /*
     public void planAllSubqueriesInSelectClause(SelectClause selClause,
         List<SelectClause> enclosingSelects) throws IOException {
 
@@ -206,6 +204,21 @@ public class SubqueryPlanner {
 
 
     }
+*/
+    /**
+     * Processes an expression and plans all subqueries.
+     *
+     * @param e the expression
+     *
+     * @param enclosingSelects the selects that are the parents of this select
+     *
+     * @param parentNode the PlanNode from which this subquery processes its tuples,
+     * helps set up environments for correlated evaluation.
+     *
+     * @return Nothing
+     *
+     * @throws
+     */
 
     public void planSubqueryInExpression(Expression e, List<SelectClause> enclosingSelects,
                                                              PlanNode parentNode) throws IOException{
@@ -230,69 +243,22 @@ public class SubqueryPlanner {
 
     }
 
+    /**
+     * Processes an expression, and checks if it has a subquery in an ORDER BY or GROUP BY clause
+     *
+     * @param e the expression
+     *
+     * @return Nothing
+     *
+     * @throws IllegalArgumentException if subquery is found in expression
+     */
 
-    // private Expression planSubquery(Expression e) throws IOException {
-    //     if (e instanceof ScalarSubquery) {
-    //         ScalarSubquery sub = (ScalarSubquery) e;
-    //         sub.setSubqueryPlan(makePlan(sub.getSubquery(), null));
-    //         return sub;
-    //     }
-    //     if (e instanceof InSubqueryOperator){
-    //         InSubqueryOperator sub = (InSubqueryOperator) e;
-    //         sub.setSubqueryPlan(makePlan(sub.getSubquery(), null));
-    //         return sub;
-    //     }
-    //     if (e instanceof ExistsOperator){
-    //         ExistsOperator sub = (ExistsOperator) e;
-    //         sub.setSubqueryPlan(makePlan(sub.getSubquery(), null));
-    //         return sub;
-    //     }
-    //     return e;
-    // }
-
-    private void findErrorSubquery(Expression e) throws IOException {
-        if (e instanceof ScalarSubquery || e instanceof InSubqueryOperator || e instanceof ExistsOperator) {
-            throw new IllegalArgumentException("Cannot contain subqueries in ORDER BY/GROUP BY clauses");
-        }
+    public void findErrorSubquery(Expression e) throws IOException {
+        SubqueryPlannerExpressionProcessor processor = new SubqueryPlannerExpressionProcessor();
+        processor.setErrorCheck(1);
+        e.traverse(processor);
     }
 
-    // public PlanNode makePlan(SelectClause selClause,
-    //                            List<SelectClause> enclosingSelects) throws IOException {
-
-    //     // Errors for ORDER BY and GROUP BY
-    //     for (OrderByExpression e : selClause.getOrderByExprs()){
-    //         findErrorSubquery(e.getExpression());
-    //     }
-    //     for (Expression e : selClause.getGroupByExprs()){
-    //         findErrorSubquery(e);
-    //     }
-
-    //     // Process where expression
-    //     Expression whereExpr = selClause.getWhereExpr();
-    //     if (whereExpr != null) {
-    //         Expression new_exp = planSubquery(whereExpr);
-    //         selClause.setWhereExpr(new_exp);
-    //     }
-
-    //     for (SelectValue sv : selClause.getSelectValues()) {
-    //         // Skip select-values that aren't expressions
-    //         if (!sv.isExpression())
-    //             continue;
-    //         Expression e = sv.getExpression();
-    //         Expression new_exp = planSubquery(e);
-    //         sv.setExpression(new_exp);
-
-    //     }
-
-    //     Expression havingExpr = selClause.getHavingExpr();
-    //     if (havingExpr != null) {
-    //         Expression new_exp = planSubquery(havingExpr);
-    //         selClause.setHavingExpr(new_exp);
-    //     }
-
-    //     Planner p = new CostBasedJoinPlanner();
-    //     return p.makePlan(selClause, enclosingSelects);
-    // }
 
 
 }

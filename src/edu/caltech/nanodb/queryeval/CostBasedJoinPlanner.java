@@ -150,9 +150,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         System.out.println("");
 
     
-        // First, check 
+        // First, create Subquery Planner object to prepare for possible subqueries
         SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
-        //subqueryPlanner.planAllSubqueriesInSelectClause(selClause, enclosingSelects);
 
         List <SelectClause> enclosingSelectsIncludingThis;
         if (enclosingSelects != null && !enclosingSelects.isEmpty()){
@@ -162,13 +161,12 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         }
         enclosingSelectsIncludingThis.add(selClause);
 
-        /*if (enclosingSelects != null && !enclosingSelects.isEmpty()) {
-
-            System.out.println("This is a correlated subquery (inside).");
-
-            throw new UnsupportedOperationException(
-                    "Not implemented:  enclosing queries");
-        }*/
+        for (OrderByExpression e : selClause.getOrderByExprs()){
+            subqueryPlanner.findErrorSubquery(e.getExpression());
+        }
+        for (Expression e : selClause.getGroupByExprs()){
+            subqueryPlanner.findErrorSubquery(e);
+        }
 
         // Processing GROUP BY expressions and Aggregates
         AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
@@ -374,6 +372,8 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *        SELECT-FROM-WHERE block.
      * @param extraConjuncts any extra conjuncts (e.g. from the WHERE clause,
      *        or HAVING clause)
+     * @param enclosingSelects extra select clauses to be passed down to
+     *        planning any subqueries we find
      * @return a {@code JoinComponent} object that represents the optimal plan
      *         corresponding to the FROM-clause
      * @throws IOException if an IO error occurs during planning.
@@ -500,6 +500,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      * @param conjuncts the collection of conjuncts that can be applied at this
      *                  level
      *
+     * @param enclosingSelects extra select clauses to be passed down to
+     *        planning any subqueries we find
+     *
      * @return a collection of {@link JoinComponent} object containing the plans
      *         and other details for each leaf from-clause
      *
@@ -551,6 +554,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *        applied in this plan from the <tt>conjuncts</tt> collection
      *        should be added to this out-param.
      *
+     * @param enclosingSelects extra select clauses to be passed down to
+     *        planning any subqueries we find
+     *
      * @return a plan tree for evaluating the specified from-clause
      *
      * @throws IOException if an IO error occurs when the planner attempts to
@@ -579,22 +585,17 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Simple FileScanNode for the Base Table case
         if (fromClause.isBaseTable()){
             if (fromClause.getResultName() != fromClause.getTableName()){
-                PlanNode initNode = makeSimpleSelect(fromClause.getTableName(), null, null);
                 PlanNode tempNode = new RenameNode(
                         makeSimpleSelect(fromClause.getTableName(), null, null),
                         fromClause.getResultName());
                 tempNode.prepare();
                 PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, tempNode.getSchema());
                 Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
-                System.out.println("LeafPred might be NULL:");
                 if (leafPred != null){
-                    System.out.println("LeafPred:");
-                    System.out.println(leafPred.toString());
                     finalNode = new SimpleFilterNode(tempNode, leafPred);
                     finalNode.prepare();
                     subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
                             finalNode);
-                    //finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
                     finalNode.prepare();
                 } else {
                     finalNode = tempNode;
@@ -687,6 +688,9 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
      *
      * @param conjuncts the collection of all conjuncts found in the query
      *
+     * @param enclosingSelects extra select clauses to be passed down to
+     *        planning any subqueries we find
+     *
      * @return a single {@link JoinComponent} object that joins all leaf
      *         components together in an optimal way.
      */
@@ -745,8 +749,6 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     if (predicate != null){
                         subqueryPlanner.planSubqueryInExpression(predicate, enclosingSelects,
                                 nextJoinPlan);
-                        /*nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
-                                JoinType.INNER, predicate);*/
                         nextJoinPlan = PlanUtils.addPredicateToPlan(nextJoinPlan, predicate);
                         nextJoinPlan.prepare();
                     }
