@@ -145,10 +145,45 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // various kinds of subqueries, queries without a FROM clause, etc.,
         // can all be incorporated into this sketch relatively easily.
 
-        System.out.println("-----------\nmakePlan for:");
-        System.out.println(selClause.toString());
-        System.out.println("");
-
+        // Decorrelate Query with SEMI_JOIN
+        Expression whereExpr = selClause.getWhereExpr();
+        if (whereExpr instanceof InSubqueryOperator && enclosingSelects == null) {
+            InSubqueryOperator sub = (InSubqueryOperator) whereExpr;
+            // Collect subquery SelectClause and the parent SelectClause
+            SelectClause subSelect = sub.getSubquery();
+            SelectClause encloseSelect = subSelect.getParentSelect();
+            if (encloseSelect.getWhereExpr().equals(whereExpr) && subSelect.isCorrelated() &&
+                    subSelect.getWhereExpr() != null && subSelect.getFromClause().isBaseTable()) {
+                // Prepare for Decorrelation with elimination of initial whereClauses
+                encloseSelect.setWhereExpr(null);
+                Expression correlatedWhere = subSelect.getWhereExpr();
+                String subqueryTableName = subSelect.getFromClause().getResultName();
+                subSelect.setWhereExpr(null);
+                // Edit Left and Right Select Clauses
+                SelectClause newRightSelect = new SelectClause();
+                for (SelectValue sv : subSelect.getSelectValues()){
+                    newRightSelect.addSelectValue(sv);
+                }
+                newRightSelect.setFromClause(subSelect.getFromClause());
+                // Create new FromClause with SEMIJOIN (subquery creates DerivedTable FromClause)
+                FromClause newFrom = new FromClause(encloseSelect.getFromClause(), new FromClause(newRightSelect,
+                        subqueryTableName), JoinType.SEMIJOIN);
+                // Change the name of the column from the subquery's WHERE expression to fit into JOIN
+                // of overall enclosing query.
+                SubqueryPlanner.DecorrelationExpressionProcessor decorrelator =
+                        new SubqueryPlanner.DecorrelationExpressionProcessor();
+                decorrelator.setCorrelatedColumnsSet(subSelect.getCorrelatedColumns());
+                decorrelator.setTableName(subqueryTableName);
+                correlatedWhere.traverse(decorrelator);
+                // Add fixed predicate to final query
+                newFrom.setConditionType(FromClause.JoinConditionType.JOIN_ON_EXPR);
+                newFrom.setOnExpression(correlatedWhere);
+                newFrom.computeSchema(storageManager.getTableManager());
+                // Finalize decorrelation
+                encloseSelect.setFromClause(newFrom);
+                return makePlan(encloseSelect, null);
+            }
+        }
     
         // First, create Subquery Planner object to prepare for possible subqueries
         SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
@@ -173,7 +208,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Processing GROUP BY expressions and Aggregates
         AggregateExpressionProcessor processor = new AggregateExpressionProcessor();
         processor.setErrorCheck(1);
-        Expression whereExpr = selClause.getWhereExpr();
+        // whereExpr is previously defined
         if (whereExpr != null) {
             Expression new_exp = whereExpr.traverse(processor);
         }
@@ -295,9 +330,6 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 finalNode = curNode;
             }
             if (!selClause.isTrivialProject()) {
-                System.out.println("Info on ProjectNode in Subquery");
-                System.out.println(selClause.getSelectValues().toString());
-                System.out.println(finalNode.toString());
                 ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
                 projNode.prepare();
                 // Plan Subqueries in SELECT Clause
@@ -465,7 +497,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         }
         if (fromClause.isJoinExpr()) {
             // Outer Join is also considered to be a leaf clause
-            if (fromClause.isOuterJoin()) {
+            if (fromClause.isOuterJoin() || fromClause.getJoinType() == JoinType.SEMIJOIN) {
                 leafFromClauses.add(fromClause);
             } else {
                 // Handle the non-leaf clause Inner Join case
@@ -641,7 +673,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 finalNode.prepare();
             }
         }
-        if (fromClause.isJoinExpr() && fromClause.isOuterJoin()){
+        if (fromClause.isJoinExpr() && (fromClause.isOuterJoin() || fromClause.getJoinType() == JoinType.SEMIJOIN) ){
             PlanNode leftNode = makeJoinPlan(fromClause.getLeftChild(), null,
                     null).joinPlan;
             PlanNode rightNode = makeJoinPlan(fromClause.getRightChild(), null,
@@ -750,13 +782,11 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     nextLeavesUsed.addAll(leaf.leavesUsed);
                     PlanNode nextJoinPlan = new NestedLoopJoinNode(planN.joinPlan, leaf.joinPlan,
                             JoinType.INNER, null);
-
                     HashSet<Expression> conjunctsUnion = new HashSet<Expression> (planN.conjunctsUsed);
                     conjunctsUnion.addAll(leaf.conjunctsUsed);
                     HashSet<Expression> unusedConjuncts = new HashSet<Expression> (conjuncts);
                     unusedConjuncts.removeAll(conjunctsUnion);
                     HashSet<Expression> nextConjunctsUsed = new HashSet<Expression>();
-
                     nextJoinPlan.prepare();
                     PredicateUtils.findExprsUsingSchemas(unusedConjuncts, false, nextConjunctsUsed,
                             nextJoinPlan.getSchema());

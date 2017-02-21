@@ -13,6 +13,7 @@ import java.util.Set;
 import edu.caltech.nanodb.expressions.*;
 import edu.caltech.nanodb.plannodes.*;
 import edu.caltech.nanodb.queryast.SelectValue;
+import edu.caltech.nanodb.relations.ColumnType;
 import edu.caltech.nanodb.relations.JoinType;
 import org.apache.log4j.Logger;
 import edu.caltech.nanodb.queryeval.CostBasedJoinPlanner;
@@ -30,7 +31,11 @@ import edu.caltech.nanodb.relations.TableInfo;
 public class SubqueryPlanner {
 
 
-
+    /**
+     * The SubqueryPlannerExpressionProcessor is used to add SubqueryOperator
+     * expressions to the external expressions_to_plan list. It is also used
+     * to check (for order and group by clauses) if there are any SubqueryOperators.
+     */
     public class SubqueryPlannerExpressionProcessor implements ExpressionProcessor {
         private int errorCheck = 0;
 
@@ -50,6 +55,44 @@ public class SubqueryPlanner {
             }
 
 
+            return e;
+        }
+    }
+
+
+    public static class DecorrelationExpressionProcessor implements ExpressionProcessor {
+        /* This is the set of the names of correlated columns within the entire WHERE
+         * expression being processed. These values are ignored in this processor. */
+        private Set<ColumnName> correlatedNames;
+
+        /* The name of the base table of the subquery being decorrelated */
+        private String tableName;
+
+        public void enter(Expression e){};
+
+
+        public void setCorrelatedColumnsSet (Set<ColumnName> columnsSet){
+            correlatedNames = columnsSet;
+        }
+
+        public void setTableName (String inputTableName){
+            tableName = inputTableName;
+        }
+
+        public Expression leave(Expression e) {
+            // This function never changes the node that is traversed.
+            if (e instanceof ColumnValue){
+                ColumnValue colV = (ColumnValue) e;
+                String prevName = colV.getColumnName().getColumnName();
+                // Adds tableName to columnValue object's columnName value, to avoid
+                // errors from an uninitialized table name.
+                if (!correlatedNames.contains(colV.getColumnName())){
+                    ColumnName colN = new ColumnName(tableName, prevName);
+                    colV.setColumnName(colN);
+                }
+                Expression finalExp = colV;
+                return finalExp;
+            }
             return e;
         }
     }
@@ -87,6 +130,10 @@ public class SubqueryPlanner {
         this.subqueryEnvironment = new Environment();
     }
 
+    /**
+     * Resets the relevant fields in preperation to handle a new
+     * subquery.
+     */
     public void reset() {
         expressions_to_plan = new ArrayList<Expression>();
         this.subqueryEnvironment = new Environment();
@@ -159,11 +206,8 @@ public class SubqueryPlanner {
 
         e.traverse(processor);
 
-        System.out.println("Create plan nodes in this expression");
 
         for(int i = 0; i < expressions_to_plan.size(); i++) {
-            System.out.println(expressions_to_plan.get(i));
-
             planSubqueryOperatorExpression(expressions_to_plan.get(i),
                     enclosingSelects, parentNode);
 
