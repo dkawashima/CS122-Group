@@ -153,6 +153,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // First, create Subquery Planner object to prepare for possible subqueries
         SubqueryPlanner subqueryPlanner = new SubqueryPlanner(this);
 
+        // Prepare enclosingSelects variable for passing into subquery plans
         List <SelectClause> enclosingSelectsIncludingThis;
         if (enclosingSelects != null && !enclosingSelects.isEmpty()){
             enclosingSelectsIncludingThis = new ArrayList<SelectClause>(enclosingSelects);
@@ -161,6 +162,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         }
         enclosingSelectsIncludingThis.add(selClause);
 
+        // Look for invalid subqueries in ORDER BY and GROUP BY clauses
         for (OrderByExpression e : selClause.getOrderByExprs()){
             subqueryPlanner.findErrorSubquery(e.getExpression());
         }
@@ -203,6 +205,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         if (fromClause == null) {
             ProjectNode projNode = new ProjectNode(selClause.getSelectValues());
             projNode.prepare();
+            // Plan Subqueries in SELECT Clause
             for (SelectValue sv : selClause.getSelectValues()) {
                 subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
                         projNode);
@@ -260,6 +263,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression wherePred = PredicateUtils.makePredicate(whereConjuncts);
                 curNode = new SimpleFilterNode(optimal.joinPlan, wherePred);
                 curNode.prepare();
+                // Plan Subqueries in WHERE Clause
                 subqueryPlanner.planSubqueryInExpression(wherePred, enclosingSelectsIncludingThis,
                         curNode);
             }
@@ -280,6 +284,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
                     SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
                     havingNode.prepare();
+                    // Plan Subqueries in HAVING Clause
                     subqueryPlanner.planSubqueryInExpression(havingPred, enclosingSelectsIncludingThis,
                             havingNode);
                     finalNode = havingNode;
@@ -295,6 +300,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 System.out.println(finalNode.toString());
                 ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
                 projNode.prepare();
+                // Plan Subqueries in SELECT Clause
                 for (SelectValue sv : selClause.getSelectValues()) {
                     subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
                             projNode);
@@ -330,6 +336,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression havingPred = PredicateUtils.makePredicate(havingConjuncts);
                     SimpleFilterNode havingNode = new SimpleFilterNode(aggregateNode, havingPred);
                     havingNode.prepare();
+                    // Plan Subqueries in HAVING Clause
                     subqueryPlanner.planSubqueryInExpression(havingPred, enclosingSelectsIncludingThis,
                             havingNode);
                     finalNode = havingNode;
@@ -341,6 +348,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             }
             if (!selClause.isTrivialProject()) {
                 ProjectNode projNode = new ProjectNode(finalNode, selClause.getSelectValues());
+                // Plan Subqueries in SELECT Clause
                 for (SelectValue sv : selClause.getSelectValues()) {
                     subqueryPlanner.planSubqueryInExpression(sv.getExpression(), enclosingSelectsIncludingThis,
                             projNode);
@@ -585,6 +593,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
         // Simple FileScanNode for the Base Table case
         if (fromClause.isBaseTable()){
             if (fromClause.getResultName() != fromClause.getTableName()){
+                // Must use RenameNode for Aliasing
                 PlanNode tempNode = new RenameNode(
                         makeSimpleSelect(fromClause.getTableName(), null, null),
                         fromClause.getResultName());
@@ -592,8 +601,10 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, tempNode.getSchema());
                 Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
                 if (leafPred != null){
+                    // Add SimpleFilterNode on top of RenameNode if predicate can be passed down
                     finalNode = new SimpleFilterNode(tempNode, leafPred);
                     finalNode.prepare();
+                    // Handle Applicable Subqueries in WHERE and HAVING clause
                     subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
                             finalNode);
                     finalNode.prepare();
@@ -601,10 +612,12 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     finalNode = tempNode;
                 }
             } else {
+                // Simple FileScanNode for the Base Table case
                 finalNode = makeSimpleSelect(fromClause.getTableName(), null, null);
                 PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
                 Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
                 if (leafPred != null) {
+                    // Handle Applicable Subqueries in WHERE and HAVING clause
                     subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
                             finalNode);
                     finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
@@ -621,6 +634,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
             PredicateUtils.findExprsUsingSchemas(conjuncts, false, leafConjuncts, finalNode.getSchema());
             Expression leafPred = PredicateUtils.makePredicate(leafConjuncts);
             if (leafPred != null){
+                // Handle Applicable Subqueries in WHERE and HAVING clause
                 subqueryPlanner.planSubqueryInExpression(leafPred, enclosingSelects,
                         finalNode);
                 finalNode = PlanUtils.addPredicateToPlan(finalNode, leafPred);
@@ -641,6 +655,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression leftPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (leftPred != null){
+                    // Handle Applicable Subqueries in WHERE and HAVING clause
                     subqueryPlanner.planSubqueryInExpression(leftPred, enclosingSelects,
                             leftNode);
                     leftNode = PlanUtils.addPredicateToPlan(leftNode, leftPred);
@@ -656,6 +671,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                 Expression rightPred = PredicateUtils.makePredicate(leafConjuncts);
                 // Only call prepare() if necessary
                 if (rightPred != null){
+                    // Handle Applicable Subqueries in WHERE and HAVING clause
                     subqueryPlanner.planSubqueryInExpression(rightPred, enclosingSelects,
                             leftNode);
                     rightNode = PlanUtils.addPredicateToPlan(rightNode, rightPred);
@@ -747,6 +763,7 @@ public class CostBasedJoinPlanner extends AbstractPlannerImpl {
                     Expression predicate = PredicateUtils.makePredicate(nextConjunctsUsed);
                     // Only call prepare() if necessary
                     if (predicate != null){
+                        // Handle Applicable Subqueries in WHERE and HAVING clause
                         subqueryPlanner.planSubqueryInExpression(predicate, enclosingSelects,
                                 nextJoinPlan);
                         nextJoinPlan = PlanUtils.addPredicateToPlan(nextJoinPlan, predicate);

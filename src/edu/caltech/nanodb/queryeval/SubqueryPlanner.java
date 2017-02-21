@@ -48,25 +48,34 @@ public class SubqueryPlanner {
                 }
                 expressions_to_plan.add(e);
             }
-            // This does not work because leave() is not supposed to throw IOExcpetion
-            // so we must do the above method.
-            // planSubqueryOperatorExpression(e);
 
 
             return e;
         }
     }
 
-    // Since ExpressionProcesser cant call planSubqueryOperatorExpression, 
-    // store the expressions in this list and process later 
-    private List<Expression> expressions_to_plan; 
+    /**
+     * Since ExpressionProcessor cannot call planSubqueryOperatorExpression,
+     * we store the expressions in this list and process later, inside the
+     * subquery planner itself.
+     */
+    private List<Expression> expressions_to_plan;
 
+    /**
+     * This field specifies the planner used by the Subquery Planner to plan
+     * subqueries.
+     */
     private Planner parentPlanner;
 
+    /**
+     * This field specifies the parent environment of all subqueries planned
+     * in an expression. It is added as a parent environment to each node in
+     * the subquery's parentNode's plan tree.
+     */
     private Environment subqueryEnvironment;
 
     /**
-     * Constructor that takes as an argument a Planner. 
+     * Constructor that takes a Planner as an argument.
      * 
      * @param parentPlanner a Planner object. Should be the Planner 
      *        that creates this instance of SubqueryPlanner
@@ -98,7 +107,7 @@ public class SubqueryPlanner {
      *
      * @return Nothing
      *
-     * @throws 
+     * @throws
      */
     private void planSubqueryOperatorExpression(Expression e, List<SelectClause> enclosingSelects, PlanNode parentNode)
             throws IOException {
@@ -129,82 +138,6 @@ public class SubqueryPlanner {
 
     }
 
-    /**
-     * Iterates through the select clause and plans all subqueries.
-     *
-     * @param selClause the select clause
-     *
-     * @param enclosingSelects the selects that are the parents of this select
-     *
-     * @return Nothing
-     *
-     * @throws 
-     */
-    /*
-    public void planAllSubqueriesInSelectClause(SelectClause selClause,
-        List<SelectClause> enclosingSelects) throws IOException {
-
-        // Throw error if there are subqueries in group or order clauses
-        for (OrderByExpression e : selClause.getOrderByExprs()){
-            findErrorSubquery(e.getExpression());
-        }
-        for (Expression e : selClause.getGroupByExprs()){
-            findErrorSubquery(e);
-        }
-
-
-        // Subqueries as select values 
-        for (SelectValue sv : selClause.getSelectValues()) {
-            planSubqueryOperatorExpression(sv.getExpression(), null, null);
-
-            // TODO delete
-            // Below is same as above^ 
-            // if(sv.getExpression() instanceof SubqueryOperator) {
-            //     ((SubqueryOperator) sv.getExpression()).setSubqueryPlan(
-            //         makePlan(((SubqueryOperator) sv.getExpression()).getSubquery(), null)
-            //         );
-            // }
-
-        }
-
-
-        // Subqueries in WHERE clause
-        Expression whereExpr = selClause.getWhereExpr();
-        SubqueryPlannerExpressionProcessor processor = new SubqueryPlannerExpressionProcessor();
-        if (whereExpr != null) {
-            whereExpr.traverse(processor);
-
-            System.out.println("Create plan nodes in whereExpr");
-
-            for(int i = 0; i < expressions_to_plan.size(); i++) {
-                System.out.println(expressions_to_plan.get(i));
-
-                planSubqueryOperatorExpression(expressions_to_plan.get(i), null, null);
-
-            }
-            expressions_to_plan.clear();
-        }
-
-
-        // Subqueries in HAVING clause
-        Expression havingExpr = selClause.getHavingExpr();
-        if (havingExpr != null) {
-            havingExpr.traverse(processor);
-
-            System.out.println("Create plan nodes in havingExpr");
-
-            for(int i = 0; i < expressions_to_plan.size(); i++) {
-                System.out.println(expressions_to_plan.get(i));
-
-                planSubqueryOperatorExpression(expressions_to_plan.get(i), null, null);
-
-            }
-            expressions_to_plan.clear();
-        }
-
-
-    }
-*/
     /**
      * Processes an expression and plans all subqueries.
      *
