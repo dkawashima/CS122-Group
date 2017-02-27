@@ -369,6 +369,8 @@ public class BTreeTupleFile implements SequentialTupleFile {
         ArrayList<Integer> pagePath = new ArrayList<>();
         LeafPage leaf = navigateToLeafPage(tup, true, pagePath);
 
+        System.out.println(leaf.toString());
+
         // TODO:  This is definitely not ideal, but should get us going.
         TupleLiteral tupLit;
         if (tup instanceof TupleLiteral)
@@ -492,9 +494,81 @@ public class BTreeTupleFile implements SequentialTupleFile {
          * It's always a good idea to code defensively:  if you see an invalid
          * page-type, flag it with an IOException, as done earlier.
          */
-        logger.error("NOT YET IMPLEMENTED:  navigateToLeafPage()");
+        System.out.println(pageType);
+        System.out.println("Root Page exists");
+        InnerPage curPage = null;
+        LeafPage finalPage = null;
+        if (pageType == BTREE_INNER_PAGE){
+            curPage = new InnerPage(dbPage, schema);
+        } else if (pageType == BTREE_LEAF_PAGE){
+            finalPage = new LeafPage(dbPage, schema);
+        }
 
-        return null;
+        while (pageType == BTREE_INNER_PAGE) {
+            int numPointers = curPage.getNumPointers();
+            int i = 0;
+
+            while (i < numPointers - 1) {
+                if (TupleComparator.comparePartialTuples(searchKey, curPage.getKey(i)) < 0) {
+                    // searchKey value is less than key in page at index i, set current page to pointer at i
+                    System.out.println("Less than");
+                    if (pagePath != null){
+                        pagePath.add(curPage.getPointer(i));
+                    }
+                    DBPage newPage = storageManager.loadDBPage(dbFile, curPage.getPointer(i));
+                    pageType = newPage.readByte(0);
+                    if (pageType == BTREE_LEAF_PAGE) {
+                        finalPage = new LeafPage(newPage, schema);
+                    } else if (pageType == BTREE_INNER_PAGE) {
+                        curPage = innerPageOps.loadPage(curPage.getPointer(i));
+                    }
+                    if (pageType != BTREE_INNER_PAGE && pageType != BTREE_LEAF_PAGE)
+                        throw new IOException("Invalid page type encountered:  " + pageType);
+
+                    break;
+                } else if (TupleComparator.comparePartialTuples(searchKey, curPage.getKey(i)) == 0) {
+                    // searchKey value is equal to key in page at index i, set current page to pointer at i + 1
+                    System.out.println("Equal to");
+                    if (pagePath != null){
+                        pagePath.add(curPage.getPointer(i + 1));
+                    }
+                    DBPage newPage = storageManager.loadDBPage(dbFile, curPage.getPointer(i + 1));
+                    pageType = newPage.readByte(0);
+                    if (pageType == BTREE_LEAF_PAGE) {
+                        finalPage = new LeafPage(newPage, schema);
+                    } else if (pageType == BTREE_INNER_PAGE) {
+                        curPage = innerPageOps.loadPage(curPage.getPointer(i + 1));
+                    }
+                    if (pageType != BTREE_INNER_PAGE && pageType != BTREE_LEAF_PAGE)
+                        throw new IOException("Invalid page type encountered:  " + pageType);
+                    break;
+                }
+                i++;
+            }
+            // searchKey value is greater than all keys in page, set current page to pointer at numPointers - 1
+            if (i == numPointers - 1){
+                System.out.println("End Page");
+                if (pagePath != null){
+                    pagePath.add(curPage.getPointer(i));
+                }
+                DBPage newPage = storageManager.loadDBPage(dbFile, curPage.getPointer(i));
+                pageType = newPage.readByte(0);
+                if (pageType == BTREE_LEAF_PAGE) {
+                    finalPage = new LeafPage(newPage, schema);
+                } else if (pageType == BTREE_INNER_PAGE) {
+                    curPage = innerPageOps.loadPage(curPage.getPointer(i));
+                }
+                if (pageType != BTREE_INNER_PAGE && pageType != BTREE_LEAF_PAGE)
+                    throw new IOException("Invalid page type encountered:  " + pageType);
+            }
+
+        }
+
+        return finalPage;
+
+
+        //logger.error("NOT YET IMPLEMENTED:  navigateToLeafPage()");
+
     }
 
 
