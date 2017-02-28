@@ -142,8 +142,7 @@ public class IndexUpdater implements RowEventListener {
                 // values. Multiple NULLs are allowed. 
 
                 /* TODO: ask TA
-    
-                The contents of this if statement seem to be useless. 
+                The contents of this if-statement seem to be useless. 
 
                 CREATE TABLE t (
                           a INTEGER,
@@ -156,6 +155,7 @@ public class IndexUpdater implements RowEventListener {
                 The exception is caught without it.
                 */
                 if(indexDef.getConstraintType() == TableConstraintType.UNIQUE) {
+                    System.out.println("Unique constraint on column set");
 
                     // If there is a match in the index of the search key, cannot add row.
                     if(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()) != null) {
@@ -164,9 +164,9 @@ public class IndexUpdater implements RowEventListener {
                         System.out.println(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()).toString());
 
                         // TODO: ask TA what correct way to handle error is
-                        logger.debug("Cannot add tuple:" + ptup + " Uniqueness constraint would be violated.");
+                        logger.error("Cannot add tuple:" + ptup + " Uniqueness constraint would be violated.");
                         
-                        System.out.println("\nUnique column. chill out dawg\n");
+                        System.out.println("\nUnique column!!!\n");
 
                         return;
                     }
@@ -201,6 +201,10 @@ public class IndexUpdater implements RowEventListener {
         logger.debug("Removing tuple " + ptup + " from indexes for table " +
             tblFileInfo.getTableName());
 
+
+        System.out.println("\n\nGREETINGS!!!\nfunction: removeRowFromIndexes()\n"); // Debug
+
+
         // Iterate over the indexes in the table.
         TableSchema schema = tblFileInfo.getSchema();
         for (ColumnRefs indexDef : schema.getIndexes().values()) {
@@ -208,13 +212,23 @@ public class IndexUpdater implements RowEventListener {
                 IndexInfo indexInfo = indexManager.openIndex(tblFileInfo,
                     indexDef.getIndexName());
 
-                // TODO:  Implement!
-                //
-                // Find and remove the entry in this index, corresponding to
-                // the passed-in tuple.
-                //
-                // If the tuple doesn't appear in this index, throw an
-                // IllegalStateException to indicate that the index is bad.
+                // Find ptup's corresponding row in the index. 
+                //      Search key contains the file-pointer;
+                //      we don't just want the index row that matches cols, since its possible that the 
+                //      columns do not have uniqueness constraint.
+                TupleLiteral searchKey = IndexUtils.makeTableSearchKey(indexDef, (Tuple) ptup, true);
+                PageTuple indexTupleToDelete = IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile());
+
+                // If indexTupleToDelete does not exist, the index is bad.
+                if(indexTupleToDelete == null) {
+                    throw new IllegalStateException("Index tuple corresponding to the to-be-deleted row is missing.");
+                }
+                // If the index tuple is found, delete it.
+                else {
+                    indexInfo.getTupleFile().deleteTuple((Tuple) indexTupleToDelete);
+                }
+                
+
             }
             catch (IOException e) {
                 throw new EventDispatchException("Couldn't update index " +
