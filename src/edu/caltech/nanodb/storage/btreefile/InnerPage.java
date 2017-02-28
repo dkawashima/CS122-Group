@@ -732,13 +732,51 @@ public class InnerPage implements DataPage {
          * Your implementation also needs to properly handle the incoming
          * parent-key, and produce a new parent-key as well.
          */
-        logger.error("NOT YET IMPLEMENTED:  movePointersLeft()");
+
+        // Get offset of last pointer that we are moving to the left sibling
+        int moveEndOffset = pointerOffsets[count];
+        //int len = moveEndOffset - OFFSET_FIRST_POINTER;
+
+        // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
+        if (parentKey != null){
+            leftSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
+        }
+
+        // Add each additional key/pointer pair from current inner page to left sibling
+        for (int i = 0; i < count - 1; i ++){
+            leftSibling.addEntry(getPointer(i), getKey(i), getPointer(i + 1));
+        }
+
+        TupleLiteral newParentKey = new TupleLiteral(getKey(count - 1));
+
+
+        // Write the count pointers from the current page to the left sibling
+        /*leftSibling.dbPage.write(leftSibling.endOffset, dbPage.getPageData(),
+                OFFSET_FIRST_POINTER + , len);
+        leftSibling.endOffset += len; */
+
+        // Move remaining entries to the left of the current page.
+        dbPage.moveDataRange(moveEndOffset, OFFSET_NUM_POINTERS,
+                endOffset - moveEndOffset);
+
+        // Update number of pointers in both pages
+        leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
+                leftSibling.getNumPointers() + count);
+        dbPage.writeShort(OFFSET_NUM_POINTERS,
+                getNumPointers() - count);
+
+        // Update number of keys in both pages
+        /* leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
+                leftSibling.getNumKeys() + count);
+        dbPage.writeShort(OFFSET_NUM_POINTERS,
+                getNumKeys() - (count - 1)); */
+
 
         // Update the cached info for both non-leaf pages.
         loadPageContents();
         leftSibling.loadPageContents();
 
-        return null;
+        return newParentKey;
     }
 
 

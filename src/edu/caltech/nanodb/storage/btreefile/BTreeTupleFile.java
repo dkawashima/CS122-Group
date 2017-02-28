@@ -505,12 +505,16 @@ public class BTreeTupleFile implements SequentialTupleFile {
         // Set initial page values; if rootPage is leaf page, then we will skip the below while loops
         if (pageType == BTREE_INNER_PAGE) {
             curPage = new InnerPage(dbPage, schema);
+            /* Only add the root page to the page path if the root page is an inner page; there is only one page in the
+             * pagePath otherwise.
+             */
             if (pagePath != null)
                 pagePath.add(rootPageNo);
         } else if (pageType == BTREE_LEAF_PAGE) {
             finalPage = new LeafPage(dbPage, schema);
-            // ArrayList where the last element is the current leaf node we are searching. Allows us
-            // to figure out which leaf page is last.
+            /* This is a local ArrayList where the last element is the current leaf node we are searching. Allows us
+             * to figure out which leaf page has no successor (no right sibling).
+             */
             ArrayList<Integer> curPagePath = new ArrayList<Integer>();
             curPagePath.add(finalPage.getPageNo());
 
