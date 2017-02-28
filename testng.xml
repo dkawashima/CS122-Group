@@ -63,27 +63,29 @@
           <include name="testBTreeTableOnePageInsert" />
           <include name="testBTreeTableTwoPageInsert" />
           <include name="testBTreeTableTwoLevelInsert" />
-          <include name="testBTreeTableThreeLevelInsert" />
+          <!--<include name="testBTreeTableThreeLevelInsert" />-->
 
           <include name="testBTreeTableOnePageInsertDelete" />
           <include name="testBTreeTableTwoPageInsertDelete" />
           <include name="testBTreeTableTwoLevelInsertDelete" />
-          <include name="testBTreeTableThreeLevelInsertDelete" />
+          <!--<include name="testBTreeTableThreeLevelInsertDelete" />-->
         </methods>
       </class>
+      
       <class name="edu.caltech.test.nanodb.indexes.TestIndexOps">
         <methods>
           <include name="testCreateNormalIndex" />
           <include name="testCreateSameColIndex" />
           <include name="testCreateSameIndex" />
-          <include name="testUniquePopulated" />
+          <include name="testUniquePopulated" /> 
         </methods>
       </class>
       <class name="edu.caltech.test.nanodb.indexes.TestUniqueOps">
         <methods>
+          
           <include name="testUniqueConstraint" />
           <include name="testUniqueIndexExists" />
-          <include name="testUniquePopulated" />
+          <include name="testUniquePopulated" /> 
         </methods>
       </class>
     </classes>
