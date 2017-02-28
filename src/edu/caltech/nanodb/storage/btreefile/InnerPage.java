@@ -977,7 +977,24 @@ public class InnerPage implements DataPage {
             }
         }
 
-        /*
+
+        int firstRightPointer = rightSibling.getPointer(0);
+        rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
+
+        // Add each additional key/pointer pair from current inner page to left sibling
+        for (int i = 0; i < count - 1; i ++){
+            rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
+                    getPointer(getNumPointers() - count + i + 1));
+        }
+        rightSibling.addEntry(rightSibling.getPointer(count - 1), parentKey, firstRightPointer);
+
+        TupleLiteral newParentKey = new TupleLiteral(getKey(getNumPointers()- count - 1));
+
+        for (int i = getNumPointers() - 1; i > getNumPointers() - 1 - count; i--){
+            deletePointer(i, false);
+        }
+
+        /* TODO:  IMPLEMENT THE REST OF THIS METHOD.
          *
          * You can use PageTuple.storeTuple() to write a key into a DBPage.
          *
@@ -1002,7 +1019,7 @@ public class InnerPage implements DataPage {
                 rightSibling.toFormattedString());
         }
 
-        return null;
+        return newParentKey;
     }
 
 
