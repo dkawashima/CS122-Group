@@ -722,7 +722,7 @@ public class InnerPage implements DataPage {
             }
         }
 
-        /* TODO:  IMPLEMENT THE REST OF THIS METHOD.
+        /*
          *
          * You can use PageTuple.storeTuple() to write a key into a DBPage.
          *
@@ -733,14 +733,12 @@ public class InnerPage implements DataPage {
          * parent-key, and produce a new parent-key as well.
          */
 
-        // Get offset of last pointer that we are moving to the left sibling
-        int moveEndOffset = pointerOffsets[count];
-        //int len = moveEndOffset - OFFSET_FIRST_POINTER;
+        // Get offset of last pointer that we are going to shift to the beginning of this inner page
+        //int moveEndOffset = pointerOffsets[count];
 
         // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
-        if (parentKey != null){
-            leftSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
-        }
+        leftSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
+
 
         // Add each additional key/pointer pair from current inner page to left sibling
         for (int i = 0; i < count - 1; i ++){
@@ -749,6 +747,9 @@ public class InnerPage implements DataPage {
 
         TupleLiteral newParentKey = new TupleLiteral(getKey(count - 1));
 
+        for (int i = 0; i < count; i++){
+            deletePointer(i, true);
+        }
 
         // Write the count pointers from the current page to the left sibling
         /*leftSibling.dbPage.write(leftSibling.endOffset, dbPage.getPageData(),
@@ -756,14 +757,14 @@ public class InnerPage implements DataPage {
         leftSibling.endOffset += len; */
 
         // Move remaining entries to the left of the current page.
-        dbPage.moveDataRange(moveEndOffset, OFFSET_NUM_POINTERS,
-                endOffset - moveEndOffset);
+        /*dbPage.moveDataRange(moveEndOffset, OFFSET_NUM_POINTERS,
+                endOffset - moveEndOffset); */
 
         // Update number of pointers in both pages
-        leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
-                leftSibling.getNumPointers() + count);
-        dbPage.writeShort(OFFSET_NUM_POINTERS,
-                getNumPointers() - count);
+        /*leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
+                leftSibling.getNumPointers() + count);*/
+        /*dbPage.writeShort(OFFSET_NUM_POINTERS,
+                getNumPointers() - count); */
 
         // Update number of keys in both pages
         /* leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
@@ -975,6 +976,20 @@ public class InnerPage implements DataPage {
             }
         }
 
+        // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
+        rightSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
+
+
+        // Add each additional key/pointer pair from current inner page to left sibling
+        for (int i = getNumPointers(); i < count - 1; i ++){
+            leftSibling.addEntry(getPointer(i), getKey(i), getPointer(i + 1));
+        }
+
+        TupleLiteral newParentKey = new TupleLiteral(getKey(count - 1));
+
+        for (int i = 0; i < count; i++){
+            deletePointer(i, true);
+        }
         /* TODO:  IMPLEMENT THE REST OF THIS METHOD.
          *
          * You can use PageTuple.storeTuple() to write a key into a DBPage.
