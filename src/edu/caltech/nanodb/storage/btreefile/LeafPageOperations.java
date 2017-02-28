@@ -797,12 +797,28 @@ public class LeafPageOperations {
             result = newLeaf.addTuple(tuple);
         }
 
+        //System.out.println(newLeaf.getTuple(0));
         Tuple smallestNewKey = newLeaf.getTuple(0);
         if (pagePath.size() > 1) {
-            List<Integer>newPagePath = pagePath.subList(0, pagePath.size() - 1);
+
+            List<Integer> newPagePath = pagePath.subList(0, pagePath.size() - 1);
+            //System.out.println(newPagePath.toString());
             InnerPage parent = innerPageOps.loadPage(pagePath.get(pagePath.size() - 2));
             innerPageOps.addTuple(parent, newPagePath, leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
+        } else {
+            //System.out.println(pagePath.toString());
+            DBPage newInnerPage = fileOps.getNewDataPage();
+            InnerPage parentPage = InnerPage.init(newInnerPage, tupleFile.getSchema(),
+                    leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
+
+            int parentPageNo = parentPage.getPageNo();
+
+            // We have a new root-page in the index!
+            DBFile dbFile = tupleFile.getDBFile();
+            DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
+            HeaderPage.setRootPageNo(dbpHeader, parentPageNo);
         }
+        System.out.println(result);
         /*
          *
          * The LeafPage class provides some helpful operations for moving leaf-

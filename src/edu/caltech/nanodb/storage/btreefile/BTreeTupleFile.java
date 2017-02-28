@@ -368,14 +368,6 @@ public class BTreeTupleFile implements SequentialTupleFile {
         // currently empty.
         ArrayList<Integer> pagePath = new ArrayList<>();
         LeafPage leaf = navigateToLeafPage(tup, true, pagePath);
-        if (pagePath != null){
-            if (pagePath.get(pagePath.size() - 1) != leaf.getPageNo()){
-                System.out.println(pagePath.toString());
-                System.out.println(leaf.getPageNo());
-                System.out.println(leaf.getTuple(leaf.getNumTuples() - 1).toString());
-                System.out.println(tup.toString());
-            }
-        }
 
 
         // TODO:  This is definitely not ideal, but should get us going.
@@ -598,6 +590,16 @@ public class BTreeTupleFile implements SequentialTupleFile {
             }
 
         }
+        /*if (pagePath != null){
+            System.out.println(pagePath.toString());
+        }
+        System.out.println(searchKey.toString());
+        System.out.println(finalPage.getPageNo());
+        if (curPage != null) {
+            System.out.println(curPage.toFormattedString());
+        }*/
+        //System.out.println(finalPage.getTuple(0));
+        //System.out.println(finalPage.getTuple(finalPage.getNumTuples() - 1));
 
         return finalPage;
 

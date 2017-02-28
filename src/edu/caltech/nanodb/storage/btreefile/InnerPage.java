@@ -735,6 +735,8 @@ public class InnerPage implements DataPage {
 
         // Get offset of last pointer that we are going to shift to the beginning of this inner page
         //int moveEndOffset = pointerOffsets[count];
+        System.out.println("Non-leaf page " + getPageNo() +
+                " contents before moving pointers left:\n" + toFormattedString());
 
         // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
         leftSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
@@ -778,6 +780,11 @@ public class InnerPage implements DataPage {
         loadPageContents();
         leftSibling.loadPageContents();
 
+        System.out.println("Left-sibling page " + leftSibling.getPageNo() +
+                " contents after moving pointers left:\n" +
+                leftSibling.toFormattedString());
+        System.out.println("Non-leaf page " + getPageNo() +
+                " contents after moving pointers left:\n" + toFormattedString());
         return newParentKey;
     }
 
@@ -791,6 +798,7 @@ public class InnerPage implements DataPage {
      *        load inner pages and navigate the tree
      *
      * @return the page path to the right sibling leaf node
+     *
      *
     public List<Integer> getRightSibling(List<Integer> pagePath,
         InnerPageOperations innerOps) {
@@ -977,6 +985,9 @@ public class InnerPage implements DataPage {
             }
         }
 
+        System.out.println("Non-leaf page " + getPageNo() +
+                " contents before moving pointers right:\n" + toFormattedString());
+
 
         int firstRightPointer = rightSibling.getPointer(0);
         rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
@@ -1010,6 +1021,12 @@ public class InnerPage implements DataPage {
         loadPageContents();
         rightSibling.loadPageContents();
 
+        System.out.println("Right-sibling page " + rightSibling.getPageNo() +
+                " contents after moving pointers right:\n" +
+                rightSibling.toFormattedString());
+        System.out.println("Non-leaf page " + getPageNo() +
+                " contents after moving pointers right:\n" + toFormattedString());
+
         if (logger.isTraceEnabled()) {
             logger.trace("Non-leaf page " + getPageNo() +
                 " contents after moving pointers right:\n" + toFormattedString());
@@ -1018,7 +1035,7 @@ public class InnerPage implements DataPage {
                 " contents after moving pointers right:\n" +
                 rightSibling.toFormattedString());
         }
-
+//return null;
         return newParentKey;
     }
 
