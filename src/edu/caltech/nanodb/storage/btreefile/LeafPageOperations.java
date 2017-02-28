@@ -760,76 +760,50 @@ public class LeafPageOperations {
 
         DBPage newDBPage = fileOps.getNewDataPage();
         LeafPage newLeaf = LeafPage.init(newDBPage, tupleFile.getSchema());
-        ArrayList<Tuple> temp = new ArrayList<Tuple>();
+
         int newIndex = -1;
-        ArrayList<Integer> sizes = new ArrayList<Integer>();
+
 
         for (int i = 0; i < leaf.getNumTuples(); i++) {
-            temp.add(leaf.getTuple(i));
-            sizes.add(leaf.getTupleSize(i));
-        }
-        for (int i = 0; i < leaf.getNumTuples(); i++) {
-            if (i == 0 && TupleComparator.compareTuples(tuple, leaf.getTuple(0)) < 0) {
-                temp.add(0, tuple);
+             if (i == 0 && TupleComparator.compareTuples(tuple, leaf.getTuple(0)) < 0) {
                 newIndex = 0;
                 break;
             }
             else if (i == leaf.getNumTuples() - 1) {
-                temp.add(tuple);
                 newIndex = leaf.getNumTuples();
                 break;
             }
             else if (TupleComparator.compareTuples(leaf.getTuple(i), tuple) < 0 &&
                     TupleComparator.compareTuples(leaf.getTuple(i + 1), tuple) >= 0) {
-                temp.add(i + 1, tuple);
                 newIndex = i + 1;
                 break;
             }
         }
+
+
         newLeaf.setNextPageNo(leaf.getNextPageNo());
         leaf.setNextPageNo(newLeaf.getPageNo());
 
-        for (int i = leaf.getNumTuples() - 1; i >= 0; i--) {
-            leaf.deleteTuple(leaf.getTuple(i));
+        BTreeFilePageTuple result = null;
+
+        leaf.moveTuplesRight(newLeaf, leaf.getNumTuples() - (int)Math.ceil((leaf.getNumTuples() + 1) / 2));
+        if (newIndex < (int)Math.ceil((leaf.getNumTuples() + 1) / 2)){
+            leaf.moveTuplesRight(newLeaf, 1);
+            result = leaf.addTuple(tuple);
+        } else {
+            if (newLeaf.getNumTuples() == leaf.getNumTuples()){
+                newLeaf.moveTuplesLeft(leaf, 1);
+            }
+            result = newLeaf.addTuple(tuple);
         }
-        for (int i = 0; i < (int)Math.ceil(temp.size() / 2); i++) {
-            if(i < newIndex) {
-                TupleLiteral newTuple = new TupleLiteral (temp.get(i));
-                newTuple.setStorageSize(sizes.get(i));
-                leaf.addTuple(newTuple);
-            }
-            else if (i == newIndex) {
-                leaf.addTuple(tuple);
-            }
-            else {
-                TupleLiteral newTuple = new TupleLiteral (temp.get(i));
-                newTuple.setStorageSize(sizes.get(i - 1));
-                leaf.addTuple(newTuple);
-            }
-        }
-        for (int i = (int)Math.ceil(temp.size() / 2); i < temp.size(); i++) {
-            if(i < newIndex) {
-                TupleLiteral newTuple = new TupleLiteral (temp.get(i));
-                newTuple.setStorageSize(sizes.get(i));
-                newLeaf.addTuple(newTuple);
-            }
-            else if (i == newIndex) {
-                newLeaf.addTuple(tuple);
-            }
-            else {
-                TupleLiteral newTuple = new TupleLiteral (temp.get(i));
-                newTuple.setStorageSize(sizes.get(i - 1));
-                newLeaf.addTuple(newTuple);
-            }
-        }
+
         Tuple smallestNewKey = newLeaf.getTuple(0);
         if (pagePath.size() > 1) {
-            List<Integer>newPagePath = pagePath.subList(0, pagePath.size() - 2);
+            List<Integer>newPagePath = pagePath.subList(0, pagePath.size() - 1);
             InnerPage parent = innerPageOps.loadPage(pagePath.get(pagePath.size() - 2));
             innerPageOps.addTuple(parent, newPagePath, leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
         }
-
-        /* TODO:  IMPLEMENT THE REST OF THIS METHOD.
+        /*
          *
          * The LeafPage class provides some helpful operations for moving leaf-
          * entries to a left or right sibling.
@@ -837,8 +811,7 @@ public class LeafPageOperations {
          * The parent page must also be updated.  If the leaf node doesn't have
          * a parent, the tree's depth will increase by one level.
          */
-        logger.error("NOT YET IMPLEMENTED:  splitLeafAndAddKey()");
-        return null;
+        return result;
     }
 
 
