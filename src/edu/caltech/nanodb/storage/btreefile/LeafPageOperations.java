@@ -786,27 +786,22 @@ public class LeafPageOperations {
 
         BTreeFilePageTuple result = null;
 
-        leaf.moveTuplesRight(newLeaf, leaf.getNumTuples() - (int)Math.ceil((leaf.getNumTuples() + 1) / 2));
-        if (newIndex < (int)Math.ceil((leaf.getNumTuples() + 1) / 2)){
-            leaf.moveTuplesRight(newLeaf, 1);
+        int valToSplitOn = (int)Math.ceil((leaf.getNumTuples()) / 2);
+        leaf.moveTuplesRight(newLeaf, leaf.getNumTuples() - valToSplitOn);
+        if (newIndex < valToSplitOn){
             result = leaf.addTuple(tuple);
         } else {
-            if (newLeaf.getNumTuples() == leaf.getNumTuples()){
-                newLeaf.moveTuplesLeft(leaf, 1);
-            }
             result = newLeaf.addTuple(tuple);
         }
 
-        //System.out.println(newLeaf.getTuple(0));
+
         Tuple smallestNewKey = newLeaf.getTuple(0);
         if (pagePath.size() > 1) {
 
             List<Integer> newPagePath = pagePath.subList(0, pagePath.size() - 1);
-            //System.out.println(newPagePath.toString());
             InnerPage parent = innerPageOps.loadPage(pagePath.get(pagePath.size() - 2));
             innerPageOps.addTuple(parent, newPagePath, leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
         } else {
-            //System.out.println(pagePath.toString());
             DBPage newInnerPage = fileOps.getNewDataPage();
             InnerPage parentPage = InnerPage.init(newInnerPage, tupleFile.getSchema(),
                     leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
@@ -818,7 +813,6 @@ public class LeafPageOperations {
             DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
             HeaderPage.setRootPageNo(dbpHeader, parentPageNo);
         }
-        System.out.println(result);
         /*
          *
          * The LeafPage class provides some helpful operations for moving leaf-
