@@ -733,18 +733,12 @@ public class InnerPage implements DataPage {
          * parent-key, and produce a new parent-key as well.
          */
 
-        // Get offset of last pointer that we are going to shift to the beginning of this inner page
-        //int moveEndOffset = pointerOffsets[count];
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents before moving pointers left:\n" + toFormattedString());
-
-        System.out.println("Count: " + count);
-        System.out.println("Num Pointers Cur: " + getNumPointers());
-        System.out.println("Num Pointers Left: " + leftSibling.getNumPointers());
-        System.out.println("Last Left Pointer Value: " + leftSibling.getPointer(leftSibling.getNumPointers() - 1));
         // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
-        leftSibling.addEntry(leftSibling.getPointer(leftSibling.getNumPointers() - 1),
-                parentKey, getPointer(0));
+        if (count > 0){
+            leftSibling.addEntry(leftSibling.getPointer(leftSibling.getNumPointers() - 1),
+                    parentKey, getPointer(0));
+
+        }
 
 
         // Add each additional key/pointer pair from current inner page to left sibling
@@ -752,11 +746,14 @@ public class InnerPage implements DataPage {
             leftSibling.addEntry(getPointer(i), getKey(i), getPointer(i + 1));
         }
 
+        TupleLiteral newParentKey = null;
+        if (count > 0){
+            newParentKey = new TupleLiteral(getKey(count - 1));
+        }
 
-        TupleLiteral newParentKey = new TupleLiteral(getKey(count - 1));
 
         for (int i = 0; i < count; i++){
-            deletePointer(getPointer(i), true);
+            deletePointer(getPointer(0), true);
         }
 
 
@@ -765,11 +762,6 @@ public class InnerPage implements DataPage {
         loadPageContents();
         leftSibling.loadPageContents();
 
-        System.out.println("Left-sibling page " + leftSibling.getPageNo() +
-                " contents after moving pointers left:\n" +
-                leftSibling.toFormattedString());
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents after moving pointers left:\n" + toFormattedString());
         return newParentKey;
     }
 
@@ -970,31 +962,11 @@ public class InnerPage implements DataPage {
             }
         }
 
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents before moving pointers right:\n" + toFormattedString());
 
         TupleLiteral newParentKey = null;
-        if (rightSibling.getNumPointers() == 0 /*&& parentKey == null*/){
-            System.out.println("Count: " + count);
-            System.out.println("Num Pointers: " + getNumPointers());
-            if (parentKey != null){
-                System.out.println("Parent Key: " + parentKey.toString());
-            }
+        if (rightSibling.getNumPointers() == 0){
 
-            System.out.println("Orig Num Pointers Short: " + rightSibling.dbPage.readShort(OFFSET_NUM_POINTERS));
-            System.out.println("Orig First Pointer Short: " + rightSibling.dbPage.readShort(OFFSET_FIRST_POINTER));
-            /*// Add initial pointer to empty right sibling
-            rightSibling.getDBPage().writeShort(OFFSET_FIRST_POINTER, getPointer(getNumPointers() - count));
-
-            // Increment the number of pointers in the page to 1 after this add.
-            rightSibling.getDBPage().writeShort(OFFSET_NUM_POINTERS,  1);*/
-
-            /*System.out.println("New Num Pointers Short: " + rightSibling.dbPage.readShort(OFFSET_NUM_POINTERS));
-            System.out.println("New First Pointer Short: " + rightSibling.dbPage.readShort(OFFSET_FIRST_POINTER));
-
-            System.out.println("New Num Pointers: " + rightSibling.getNumPointers());
-            System.out.println("Page Data: " + dbPage.getPageData().toString());*/
-
+            // Handle Empty Right Sibling case separately
 
             rightSibling.dbPage.writeShort(OFFSET_FIRST_POINTER, getPointer(getNumPointers() - count));
 
@@ -1002,21 +974,7 @@ public class InnerPage implements DataPage {
 
             rightSibling.numPointers = 1;
 
-            /*rightSibling.pointerOffsets = new int[1];
-
-            rightSibling.pointerOffsets[0] = OFFSET_FIRST_POINTER;*/
-
             rightSibling.loadPageContents();
-
-
-            System.out.println("New Num Pointers Short: " + rightSibling.dbPage.readShort(OFFSET_NUM_POINTERS));
-            System.out.println("New First Pointer Short: " + rightSibling.dbPage.readShort(OFFSET_FIRST_POINTER));
-
-            System.out.println("New Num Pointers: " + rightSibling.getNumPointers());
-
-            // Handle Empty Right Sibling case separately
-            /*rightSibling = InnerPage.init(rightSibling.getDBPage(), schema, getPointer(getNumPointers() - count),
-                    getKey(getNumPointers() - count), getPointer(getNumPointers() - count + 1) );*/
 
             for (int i = 0; i < count - 1; i ++){
                 rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
@@ -1026,11 +984,10 @@ public class InnerPage implements DataPage {
 
             int initNumPointers = getNumPointers();
             for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
-                //System.out.println("I in Delete: " + i);
                 deletePointer(getPointer(i), false);
             }
+
         } else {
-            //System.out.println(rightSibling.getPageNo());
             int firstRightPointer = rightSibling.getPointer(0);
             rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
 
@@ -1045,7 +1002,6 @@ public class InnerPage implements DataPage {
 
             int initNumPointers = getNumPointers();
             for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
-                //System.out.println("I in Delete: " + i);
                 deletePointer(getPointer(i), false);
             }
         }
@@ -1060,17 +1016,10 @@ public class InnerPage implements DataPage {
          * Your implementation also needs to properly handle the incoming
          * parent-key, and produce a new parent-key as well.
          */
-        //logger.error("NOT YET IMPLEMENTED:  movePointersRight()");
 
         // Update the cached info for both non-leaf pages.
         loadPageContents();
         rightSibling.loadPageContents();
-
-        System.out.println("Right-sibling page " + rightSibling.getPageNo() +
-                " contents after moving pointers right:\n" +
-                rightSibling.toFormattedString());
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents after moving pointers right:\n" + toFormattedString());
 
         if (logger.isTraceEnabled()) {
             logger.trace("Non-leaf page " + getPageNo() +
