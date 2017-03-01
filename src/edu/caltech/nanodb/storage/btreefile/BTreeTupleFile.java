@@ -504,10 +504,13 @@ public class BTreeTupleFile implements SequentialTupleFile {
                 pagePath.add(rootPageNo);
         } else if (pageType == BTREE_LEAF_PAGE) {
             finalPage = new LeafPage(dbPage, schema);
+            if (pagePath != null && pagePath.size() == 0 ){
+                pagePath.add(finalPage.getPageNo());
+            }
             /* This is a local ArrayList where the last element is the current leaf node we are searching. Allows us
              * to figure out which leaf page has no successor (no right sibling).
              */
-            ArrayList<Integer> curPagePath = new ArrayList<Integer>();
+           /* ArrayList<Integer> curPagePath = new ArrayList<Integer>();
             curPagePath.add(finalPage.getPageNo());
 
             // Iterate through all leaf pages until we find the one that would contain this search key
@@ -524,7 +527,7 @@ public class BTreeTupleFile implements SequentialTupleFile {
             }
             if (pagePath != null && pagePath.size() == 0 ){
                 pagePath.add(finalPage.getPageNo());
-            }
+            }*/
         }
 
         while (pageType == BTREE_INNER_PAGE) {
@@ -590,16 +593,7 @@ public class BTreeTupleFile implements SequentialTupleFile {
             }
 
         }
-        /*if (pagePath != null){
-            System.out.println(pagePath.toString());
-        }
-        System.out.println(searchKey.toString());
-        System.out.println(finalPage.getPageNo());
-        if (curPage != null) {
-            System.out.println(curPage.toFormattedString());
-        }*/
-        //System.out.println(finalPage.getTuple(0));
-        //System.out.println(finalPage.getTuple(finalPage.getNumTuples() - 1));
+
 
         return finalPage;
 

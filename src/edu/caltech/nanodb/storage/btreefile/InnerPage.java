@@ -733,13 +733,12 @@ public class InnerPage implements DataPage {
          * parent-key, and produce a new parent-key as well.
          */
 
-        // Get offset of last pointer that we are going to shift to the beginning of this inner page
-        //int moveEndOffset = pointerOffsets[count];
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents before moving pointers left:\n" + toFormattedString());
-
         // Add Parent Key in between last pointer of left sibling and first pointer of current leaf
-        leftSibling.addEntry(leftSibling.getNumPointers() - 1, parentKey, getPointer(0));
+        if (count > 0){
+            leftSibling.addEntry(leftSibling.getPointer(leftSibling.getNumPointers() - 1),
+                    parentKey, getPointer(0));
+
+        }
 
 
         // Add each additional key/pointer pair from current inner page to left sibling
@@ -747,44 +746,22 @@ public class InnerPage implements DataPage {
             leftSibling.addEntry(getPointer(i), getKey(i), getPointer(i + 1));
         }
 
-
-        TupleLiteral newParentKey = new TupleLiteral(getKey(count - 1));
-
-        for (int i = 0; i < count; i++){
-            deletePointer(i, true);
+        TupleLiteral newParentKey = null;
+        if (count > 0){
+            newParentKey = new TupleLiteral(getKey(count - 1));
         }
 
-        // Write the count pointers from the current page to the left sibling
-        /*leftSibling.dbPage.write(leftSibling.endOffset, dbPage.getPageData(),
-                OFFSET_FIRST_POINTER + , len);
-        leftSibling.endOffset += len; */
 
-        // Move remaining entries to the left of the current page.
-        /*dbPage.moveDataRange(moveEndOffset, OFFSET_NUM_POINTERS,
-                endOffset - moveEndOffset); */
+        for (int i = 0; i < count; i++){
+            deletePointer(getPointer(0), true);
+        }
 
-        // Update number of pointers in both pages
-        /*leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
-                leftSibling.getNumPointers() + count);*/
-        /*dbPage.writeShort(OFFSET_NUM_POINTERS,
-                getNumPointers() - count); */
-
-        // Update number of keys in both pages
-        /* leftSibling.dbPage.writeShort(OFFSET_NUM_POINTERS,
-                leftSibling.getNumKeys() + count);
-        dbPage.writeShort(OFFSET_NUM_POINTERS,
-                getNumKeys() - (count - 1)); */
 
 
         // Update the cached info for both non-leaf pages.
         loadPageContents();
         leftSibling.loadPageContents();
 
-        System.out.println("Left-sibling page " + leftSibling.getPageNo() +
-                " contents after moving pointers left:\n" +
-                leftSibling.toFormattedString());
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents after moving pointers left:\n" + toFormattedString());
         return newParentKey;
     }
 
@@ -985,27 +962,51 @@ public class InnerPage implements DataPage {
             }
         }
 
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents before moving pointers right:\n" + toFormattedString());
 
+        TupleLiteral newParentKey = null;
+        if (rightSibling.getNumPointers() == 0){
 
-        int firstRightPointer = rightSibling.getPointer(0);
-        rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
+            // Handle Empty Right Sibling case separately
 
-        // Add each additional key/pointer pair from current inner page to left sibling
-        for (int i = 0; i < count - 1; i ++){
-            rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
-                    getPointer(getNumPointers() - count + i + 1));
+            rightSibling.dbPage.writeShort(OFFSET_FIRST_POINTER, getPointer(getNumPointers() - count));
+
+            rightSibling.dbPage.writeShort(OFFSET_NUM_POINTERS, 1);
+
+            rightSibling.numPointers = 1;
+
+            rightSibling.loadPageContents();
+
+            for (int i = 0; i < count - 1; i ++){
+                rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
+                        getPointer(getNumPointers() - count + i + 1));
+            }
+            newParentKey = new TupleLiteral(getKey(getNumPointers() - count - 1));
+
+            int initNumPointers = getNumPointers();
+            for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
+                deletePointer(getPointer(i), false);
+            }
+
+        } else {
+            int firstRightPointer = rightSibling.getPointer(0);
+            rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
+
+            // Add each additional key/pointer pair from current inner page to left sibling
+            for (int i = 0; i < count - 1; i ++){
+                rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
+                        getPointer(getNumPointers() - count + i + 1));
+            }
+            rightSibling.addEntry(rightSibling.getPointer(count - 1), parentKey, firstRightPointer);
+
+            newParentKey = new TupleLiteral(getKey(getNumPointers()- count - 1));
+
+            int initNumPointers = getNumPointers();
+            for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
+                deletePointer(getPointer(i), false);
+            }
         }
-        rightSibling.addEntry(rightSibling.getPointer(count - 1), parentKey, firstRightPointer);
 
-        TupleLiteral newParentKey = new TupleLiteral(getKey(getNumPointers()- count - 1));
-
-        for (int i = getNumPointers() - 1; i > getNumPointers() - 1 - count; i--){
-            deletePointer(i, false);
-        }
-
-        /* TODO:  IMPLEMENT THE REST OF THIS METHOD.
+        /*
          *
          * You can use PageTuple.storeTuple() to write a key into a DBPage.
          *
@@ -1015,17 +1016,10 @@ public class InnerPage implements DataPage {
          * Your implementation also needs to properly handle the incoming
          * parent-key, and produce a new parent-key as well.
          */
-        //logger.error("NOT YET IMPLEMENTED:  movePointersRight()");
 
         // Update the cached info for both non-leaf pages.
         loadPageContents();
         rightSibling.loadPageContents();
-
-        System.out.println("Right-sibling page " + rightSibling.getPageNo() +
-                " contents after moving pointers right:\n" +
-                rightSibling.toFormattedString());
-        System.out.println("Non-leaf page " + getPageNo() +
-                " contents after moving pointers right:\n" + toFormattedString());
 
         if (logger.isTraceEnabled()) {
             logger.trace("Non-leaf page " + getPageNo() +
@@ -1035,7 +1029,6 @@ public class InnerPage implements DataPage {
                 " contents after moving pointers right:\n" +
                 rightSibling.toFormattedString());
         }
-//return null;
         return newParentKey;
     }
 
