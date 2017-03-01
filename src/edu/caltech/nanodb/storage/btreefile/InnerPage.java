@@ -746,12 +746,13 @@ public class InnerPage implements DataPage {
             leftSibling.addEntry(getPointer(i), getKey(i), getPointer(i + 1));
         }
 
+        // Set the value of the new parent key between these two nodes
         TupleLiteral newParentKey = null;
         if (count > 0){
             newParentKey = new TupleLiteral(getKey(count - 1));
         }
 
-
+        // Delete the newly-shifted pointers and keys from the original inner page
         for (int i = 0; i < count; i++){
             deletePointer(getPointer(0), true);
         }
@@ -965,29 +966,33 @@ public class InnerPage implements DataPage {
 
         TupleLiteral newParentKey = null;
         if (rightSibling.getNumPointers() == 0){
-
             // Handle Empty Right Sibling case separately
 
+            /* Manually set the first pointer of the right sibling as the first pointer in the
+             * in the current leaf page that is being shifted.
+             */
             rightSibling.dbPage.writeShort(OFFSET_FIRST_POINTER, getPointer(getNumPointers() - count));
-
             rightSibling.dbPage.writeShort(OFFSET_NUM_POINTERS, 1);
-
             rightSibling.numPointers = 1;
-
             rightSibling.loadPageContents();
 
+            // Add each additional key/pointer pair from current inner page to right sibling
             for (int i = 0; i < count - 1; i ++){
                 rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
                         getPointer(getNumPointers() - count + i + 1));
             }
+
+            // Set new parent key to leftover tuple with out pointer to the right of it in current inner page
             newParentKey = new TupleLiteral(getKey(getNumPointers() - count - 1));
 
+            // Delete shifted pointers from original page
             int initNumPointers = getNumPointers();
             for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
                 deletePointer(getPointer(i), false);
             }
 
         } else {
+            // Replace prior first pointer in right sibling with new first pointer
             int firstRightPointer = rightSibling.getPointer(0);
             rightSibling.replacePointer(0, getPointer(getNumPointers() - count));
 
@@ -996,10 +1001,13 @@ public class InnerPage implements DataPage {
                 rightSibling.addEntry(rightSibling.getPointer(i), getKey(getNumPointers() - count + i),
                         getPointer(getNumPointers() - count + i + 1));
             }
+            // Add initial first right sibling pointer back into right sibling
             rightSibling.addEntry(rightSibling.getPointer(count - 1), parentKey, firstRightPointer);
 
+            // Set new parent key to leftover tuple with out pointer to the right of it in current inner page
             newParentKey = new TupleLiteral(getKey(getNumPointers()- count - 1));
 
+            // Delete shifted pointers from original page
             int initNumPointers = getNumPointers();
             for (int i = initNumPointers - 1; i > initNumPointers - 1 - count; i--){
                 deletePointer(getPointer(i), false);

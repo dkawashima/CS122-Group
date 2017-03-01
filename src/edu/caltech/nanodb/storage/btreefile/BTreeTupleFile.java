@@ -478,8 +478,6 @@ public class BTreeTupleFile implements SequentialTupleFile {
         if (pageType != BTREE_INNER_PAGE && pageType != BTREE_LEAF_PAGE)
             throw new IOException("Invalid page type encountered:  " + pageType);
 
-        /*if (pagePath != null)
-            pagePath.add(rootPageNo);*/
 
         /*
          *
@@ -507,27 +505,6 @@ public class BTreeTupleFile implements SequentialTupleFile {
             if (pagePath != null && pagePath.size() == 0 ){
                 pagePath.add(finalPage.getPageNo());
             }
-            /* This is a local ArrayList where the last element is the current leaf node we are searching. Allows us
-             * to figure out which leaf page has no successor (no right sibling).
-             */
-           /* ArrayList<Integer> curPagePath = new ArrayList<Integer>();
-            curPagePath.add(finalPage.getPageNo());
-
-            // Iterate through all leaf pages until we find the one that would contain this search key
-            while (finalPage.getRightSibling(curPagePath) != -1){
-                if (TupleComparator.comparePartialTuples(searchKey,
-                        finalPage.getTuple(finalPage.getNumTuples() - 1)) < 0){
-                    if (pagePath != null)
-                        pagePath.add(finalPage.getPageNo());
-                    return finalPage;
-                }
-                DBPage nextPage = storageManager.loadDBPage(dbFile, finalPage.getRightSibling(curPagePath));
-                finalPage = new LeafPage(nextPage, schema);
-                curPagePath.add(finalPage.getPageNo());
-            }
-            if (pagePath != null && pagePath.size() == 0 ){
-                pagePath.add(finalPage.getPageNo());
-            }*/
         }
 
         while (pageType == BTREE_INNER_PAGE) {
@@ -561,6 +538,7 @@ public class BTreeTupleFile implements SequentialTupleFile {
                     if (pagePath != null) {
                         pagePath.add(curPage.getPointer(i + 1));
                     }
+                    // Load in the next page in the tree, also updating the current pageType
                     pageChanged = true;
                     DBPage newPage = storageManager.loadDBPage(dbFile, curPage.getPointer(i + 1));
                     pageType = newPage.readByte(0);
