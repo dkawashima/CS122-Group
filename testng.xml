@@ -68,7 +68,7 @@
           <include name="testBTreeTableOnePageInsertDelete" />
           <include name="testBTreeTableTwoPageInsertDelete" />
           <include name="testBTreeTableTwoLevelInsertDelete" />
-          <!--<include name="testBTreeTableThreeLevelInsertDelete" />-->
+          <include name="testBTreeTableThreeLevelInsertDelete" />
         </methods>
       </class>
       
