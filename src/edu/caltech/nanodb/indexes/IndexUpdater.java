@@ -118,21 +118,65 @@ public class IndexUpdater implements RowEventListener {
         logger.debug("Adding tuple " + ptup + " to indexes for table " +
             tblFileInfo.getTableName());
 
-        // Iterate over the indexes in the table.
+        System.out.println("\n\nHELLO THERE!!!!\nfunction: addRowToIndexes()\n"); // Debug
+
+
+        // Iterate over the index tables for the table.
+        // ColumnRefs is a set of columns
         TableSchema schema = tblFileInfo.getSchema();
         for (ColumnRefs indexDef : schema.getIndexes().values()) {
             try {
                 IndexInfo indexInfo = indexManager.openIndex(tblFileInfo,
                     indexDef.getIndexName());
 
-                // TODO:  Implement!
-                //
-                // If the index is a unique index, then verify that there
-                // isn't already a tuple in the index with the same values
-                // (excluding the tuple-pointer column, of course).
-                //
-                // Finally, add a new tuple to the index, including the
+                System.out.println("The ColumnRefs:");
+                System.out.println(indexDef.toString());
+                System.out.println();
+
+                // Create a search key based on the ColumnRefs indexDef - doesn't include tuple's
+                // file pointer so cannot be used for insertion
+                TupleLiteral searchKey = IndexUtils.makeTableSearchKey(indexDef, (Tuple) ptup, false);
+
+
+                // Check Unique index: column the index is on cannot have duplicate
+                // values. Multiple NULLs are allowed. 
+
+                /* TODO: ask TA
+                The contents of this if-statement seem to be useless. 
+
+                CREATE TABLE t (
+                          a INTEGER,
+                          b VARCHAR(30) UNIQUE,
+                          c FLOAT
+                );
+                insert into t values(1, 'bob lee', 3.2);
+                insert into t values(3, 'bob lee', 3.2);
+
+                The exception is caught without it.
+                */
+                if(indexDef.getConstraintType() == TableConstraintType.UNIQUE) {
+                    System.out.println("Unique constraint on column set");
+
+                    // If there is a match in the index of the search key, cannot add row.
+                    if(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()) != null) {
+                        
+                        System.out.println("\nThe tuple that already exists in the index");
+                        System.out.println(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()).toString());
+
+                        // TODO: ask TA what correct way to handle error is
+                        logger.error("Cannot add tuple:" + ptup + " Uniqueness constraint would be violated.");
+                        
+                        System.out.println("\nUnique column!!!\n");
+
+                        return;
+                    }
+                }
+
+                // Add a new tuple to the index, including the
                 // tuple-pointer to the tuple in the table.
+                TupleLiteral newIndexTuple = IndexUtils.makeTableSearchKey(indexDef, (Tuple) ptup, true);
+                indexInfo.getTupleFile().addTuple(newIndexTuple);
+
             }
             catch (IOException e) {
                 throw new EventDispatchException("Couldn't update index " +
@@ -157,6 +201,10 @@ public class IndexUpdater implements RowEventListener {
         logger.debug("Removing tuple " + ptup + " from indexes for table " +
             tblFileInfo.getTableName());
 
+
+        System.out.println("\n\nGREETINGS!!!\nfunction: removeRowFromIndexes()\n"); // Debug
+
+
         // Iterate over the indexes in the table.
         TableSchema schema = tblFileInfo.getSchema();
         for (ColumnRefs indexDef : schema.getIndexes().values()) {
@@ -164,13 +212,23 @@ public class IndexUpdater implements RowEventListener {
                 IndexInfo indexInfo = indexManager.openIndex(tblFileInfo,
                     indexDef.getIndexName());
 
-                // TODO:  Implement!
-                //
-                // Find and remove the entry in this index, corresponding to
-                // the passed-in tuple.
-                //
-                // If the tuple doesn't appear in this index, throw an
-                // IllegalStateException to indicate that the index is bad.
+                // Find ptup's corresponding row in the index. 
+                //      Search key contains the file-pointer;
+                //      we don't just want the index row that matches cols, since its possible that the 
+                //      columns do not have uniqueness constraint.
+                TupleLiteral searchKey = IndexUtils.makeTableSearchKey(indexDef, (Tuple) ptup, true);
+                PageTuple indexTupleToDelete = IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile());
+
+                // If indexTupleToDelete does not exist, the index is bad.
+                if(indexTupleToDelete == null) {
+                    throw new IllegalStateException("Index tuple corresponding to the to-be-deleted row is missing.");
+                }
+                // If the index tuple is found, delete it.
+                else {
+                    indexInfo.getTupleFile().deleteTuple((Tuple) indexTupleToDelete);
+                }
+                
+
             }
             catch (IOException e) {
                 throw new EventDispatchException("Couldn't update index " +
