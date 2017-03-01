@@ -859,6 +859,8 @@ public class InnerPageOperations {
                                         int pageNo1, Tuple key1, int pageNo2) {
         InnerPage page;
 
+        System.out.println(prevPage.toFormattedString());
+        System.out.println(nextPage.toFormattedString());
         // See if pageNo1 appears in the left page.
         int ptrIndex1 = prevPage.getIndexOfPointer(pageNo1);
         if (ptrIndex1 != -1) {
