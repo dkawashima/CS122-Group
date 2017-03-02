@@ -113,13 +113,12 @@ public class IndexUpdater implements RowEventListener {
      * @param tblFileInfo details of the table being updated
      *
      * @param ptup the new tuple that was inserted into the table
+     *
+     * @throws IllegalArgumentException if uniqueness constraint violated
      */
     private void addRowToIndexes(TableInfo tblFileInfo, PageTuple ptup) {
         logger.debug("Adding tuple " + ptup + " to indexes for table " +
             tblFileInfo.getTableName());
-
-        System.out.println("\n\nHELLO THERE!!!!\nfunction: addRowToIndexes()\n"); // Debug
-
 
         // Iterate over the index tables for the table.
         // ColumnRefs is a set of columns
@@ -129,46 +128,17 @@ public class IndexUpdater implements RowEventListener {
                 IndexInfo indexInfo = indexManager.openIndex(tblFileInfo,
                     indexDef.getIndexName());
 
-                System.out.println("The ColumnRefs:");
-                System.out.println(indexDef.toString());
-                System.out.println();
-
                 // Create a search key based on the ColumnRefs indexDef - doesn't include tuple's
                 // file pointer so cannot be used for insertion
                 TupleLiteral searchKey = IndexUtils.makeTableSearchKey(indexDef, (Tuple) ptup, false);
 
-
-                // Check Unique index: column the index is on cannot have duplicate
-                // values. Multiple NULLs are allowed. 
-
-                /* TODO: ask TA
-                The contents of this if-statement seem to be useless. 
-
-                CREATE TABLE t (
-                          a INTEGER,
-                          b VARCHAR(30) UNIQUE,
-                          c FLOAT
-                );
-                insert into t values(1, 'bob lee', 3.2);
-                insert into t values(3, 'bob lee', 3.2);
-
-                The exception is caught without it.
-                */
+                // Check Unique index
                 if(indexDef.getConstraintType() == TableConstraintType.UNIQUE) {
-                    System.out.println("Unique constraint on column set");
-
                     // If there is a match in the index of the search key, cannot add row.
                     if(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()) != null) {
-                        
-                        System.out.println("\nThe tuple that already exists in the index");
-                        System.out.println(IndexUtils.findTupleInIndex((Tuple) searchKey, indexInfo.getTupleFile()).toString());
-
-                        // TODO: ask TA what correct way to handle error is
                         logger.error("Cannot add tuple:" + ptup + " Uniqueness constraint would be violated.");
-                        
-                        System.out.println("\nUnique column!!!\n");
+                        throw new IllegalArgumentException("Cannot add tuple:" + ptup + " Uniqueness constraint would be violated.");
 
-                        return;
                     }
                 }
 
@@ -201,10 +171,6 @@ public class IndexUpdater implements RowEventListener {
         logger.debug("Removing tuple " + ptup + " from indexes for table " +
             tblFileInfo.getTableName());
 
-
-        System.out.println("\n\nGREETINGS!!!\nfunction: removeRowFromIndexes()\n"); // Debug
-
-
         // Iterate over the indexes in the table.
         TableSchema schema = tblFileInfo.getSchema();
         for (ColumnRefs indexDef : schema.getIndexes().values()) {
@@ -227,7 +193,6 @@ public class IndexUpdater implements RowEventListener {
                 else {
                     indexInfo.getTupleFile().deleteTuple((Tuple) indexTupleToDelete);
                 }
-                
 
             }
             catch (IOException e) {
