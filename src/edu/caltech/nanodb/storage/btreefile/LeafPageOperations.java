@@ -761,9 +761,8 @@ public class LeafPageOperations {
         DBPage newDBPage = fileOps.getNewDataPage();
         LeafPage newLeaf = LeafPage.init(newDBPage, tupleFile.getSchema());
 
+        // Find the index in the original leaf page at which this tuple would be inserted
         int newIndex = -1;
-
-
         for (int i = 0; i < leaf.getNumTuples(); i++) {
              if (i == 0 && TupleComparator.compareTuples(tuple, leaf.getTuple(0)) < 0) {
                 newIndex = 0;
@@ -780,12 +779,13 @@ public class LeafPageOperations {
             }
         }
 
-
+        // Update next leaf page pointers for the created page and the page being split
         newLeaf.setNextPageNo(leaf.getNextPageNo());
         leaf.setNextPageNo(newLeaf.getPageNo());
 
         BTreeFilePageTuple result = null;
 
+        // Move tuples from current page to new page, insert new tuple in correct location
         int valToSplitOn = (int)Math.ceil((leaf.getNumTuples()) / 2);
         leaf.moveTuplesRight(newLeaf, leaf.getNumTuples() - valToSplitOn);
         if (newIndex < valToSplitOn){
@@ -794,10 +794,9 @@ public class LeafPageOperations {
             result = newLeaf.addTuple(tuple);
         }
 
-
+        // Update parent inner Page with new key and pointer, or create a new inner page if no parent exists
         Tuple smallestNewKey = newLeaf.getTuple(0);
         if (pagePath.size() > 1) {
-
             List<Integer> newPagePath = pagePath.subList(0, pagePath.size() - 1);
             InnerPage parent = innerPageOps.loadPage(pagePath.get(pagePath.size() - 2));
             innerPageOps.addTuple(parent, newPagePath, leaf.getPageNo(), smallestNewKey, newLeaf.getPageNo());
