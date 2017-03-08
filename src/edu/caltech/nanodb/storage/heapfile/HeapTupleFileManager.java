@@ -59,6 +59,8 @@ public class HeapTupleFileManager implements TupleFileManager {
         headerPage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, -1);
 
         headerPage.unpin();
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(headerPage);
         return tupleFile;
     }
 
@@ -132,6 +134,8 @@ public class HeapTupleFileManager implements TupleFileManager {
         int statsSize = hpWriter.getPosition() - schemaEndPos;
         HeaderPage.setStatsSize(headerPage, statsSize);
         headerPage.unpin();
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(headerPage);
     }
 
 

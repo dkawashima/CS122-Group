@@ -359,11 +359,11 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         // data file, create a new page.
 
 
-        // Load the header page and access the free block linked list pointers. 
+        // Load the header page and access the free block linked list pointers.
         DBPage headerpage = storageManager.loadDBPage(dbFile, 0);
-        int begin_list_pointer = 
+        int begin_list_pointer =
             headerpage.readInt(HeaderPage.OFFSET_BEGIN_PTR_START);
-        int prevPageNo = 0; 
+        int prevPageNo = 0;
         int pageNo = 0;
         DBPage dbPage = null;
 
@@ -380,15 +380,15 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), -1);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
 
-        } 
-        else {    
-            pageNo = begin_list_pointer; 
+        }
+        else {
+            pageNo = begin_list_pointer;
 
 
             while (true) {
                 // Try to load the page without creating a new one.
                 if(pageNo != -1) {
-                    try { // Just in case linked list does not point 
+                    try { // Just in case linked list does not point
                           // to valid block
 
 
@@ -445,8 +445,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
                 dbPage.unpin();
                 dbPage = null;  // So the next section will work properly.
-                
-            } 
+
+            }
 
         }
 
@@ -462,9 +462,10 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
 
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), old_head);
-               
+
         }
         headerpage.unpin();
+
         int slot = DataPage.allocNewTuple(dbPage, tupSize);
         int tupOffset = DataPage.getSlotValue(dbPage, slot);
 
@@ -487,7 +488,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         }
 
         if(DataPage.getFreeSpaceInPage(dbPage) < calculated_tuple_size) {
-            DBPage prevdbPage = storageManager.loadDBPage(dbFile, 
+            DBPage prevdbPage = storageManager.loadDBPage(dbFile,
                 prevPageNo);
             int nextdbPageNo = dbPage.readInt(DataPage.getTupleDataEnd(dbPage));
 
@@ -500,10 +501,16 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), 0);
             prevdbPage.unpin();
+            // Log change to write-ahead log
+            storageManager.logDBPageWrite(prevdbPage);
         }
 
         DataPage.sanityCheck(dbPage);
         dbPage.unpin();
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(dbPage);
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(headerpage);
         return pageTup;
     }
 
@@ -575,10 +582,13 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             // curPage is the header page
             if(curPage == null) {
                 headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, nextdbPageNo);
+                // Log change to write-ahead log
+                storageManager.logDBPageWrite(headerpage);
             }
             else {
                 curPage.writeInt(DataPage.getTupleDataEnd(curPage), nextdbPageNo);
-
+                // Log change to write-ahead log
+                storageManager.logDBPageWrite(curPage);
             }
         }
         else if(DataPage.getFreeSpaceInPage(dbPage) >= calculated_tuple_size &&
@@ -589,7 +599,11 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
             headerpage.unpin();
+            // Log change to write-ahead log
+            storageManager.logDBPageWrite(headerpage);
         }
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(dbPage);
 
         DataPage.sanityCheck(dbPage);
     }
@@ -627,10 +641,14 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
             headerpage.unpin();
+            // Log change to write-ahead log
+            storageManager.logDBPageWrite(headerpage);
         }
         DataPage.deleteTuple(dbPage, ptup.getSlot());
         DataPage.sanityCheck(dbPage);
         ptup.unpin();
+        // Log change to write-ahead log
+        storageManager.logDBPageWrite(dbPage);
         // Note that we don't invalidate the page-tuple when it is deleted,
         // so that the tuple can still be unpinned, etc.
     }
