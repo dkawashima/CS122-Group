@@ -449,14 +449,107 @@ public class TransactionManager implements BufferManagerObserver {
      *         going to be broken.
      */
     public void forceWAL(LogSequenceNumber lsn) throws IOException {
-        // TODO:  IMPLEMENT
-        //
+        /* TODO: Why is this atomic and durable?
+         *
+         */
+
+        // This transaction's LSN has already been written to disk, so we can ignore this call
+        if (lsn.compareTo(txnStateNextLSN) <= 0){
+            return;
+        }
+        int firstFileNo = txnStateNextLSN.getLogFileNo();
+        int lastFileNo = lsn.getLogFileNo();
+
+        // Iteratively add each file, starting with the first one and ending with the last one,
+        // to disk
+        if (firstFileNo == lastFileNo){ // both txnStateNextLSN and lsn fall in same file
+            String fileName = WALManager.getWALFileName(firstFileNo);
+            BufferManager bufferManager = storageManager.getBufferManager();
+            DBFile file = bufferManager.getFile(fileName);
+            if (file == null){ // File is not currently open, must be read from disk
+                file = storageManager.getFileManager().openDBFile(fileName);
+                // Must only write pages after the current txnStateNextLSN and through lsn
+                int firstPageNo = 0;
+                while (txnStateNextLSN.compareTo(bufferManager.getPage(file, firstPageNo).getPageLSN()) < 0) {
+                    firstPageNo++;
+                }
+                int lastPageNo = firstPageNo;
+                while (lsn.compareTo(bufferManager.getPage(file, lastPageNo).getPageLSN()) < 0) {
+                    lastPageNo++;
+                }
+                bufferManager.writeDBFile(file, firstPageNo, lastPageNo, false);
+            } else { // File is currently in buffer
+                // Must only write pages after the current txnStateNextLSN and through lsn
+                int firstPageNo = 0;
+                while (txnStateNextLSN.compareTo(bufferManager.getPage(file, firstPageNo).getPageLSN()) < 0) {
+                    firstPageNo++;
+                }
+                int lastPageNo = firstPageNo;
+                while (lsn.compareTo(bufferManager.getPage(file, lastPageNo).getPageLSN()) < 0) {
+                    lastPageNo++;
+                }
+                bufferManager.writeDBFile(file, firstPageNo, lastPageNo, true);
+            }
+        } else { // txnStateNextLSN and lsn fall in different files
+            for (int fileNo = firstFileNo; fileNo <= lastFileNo; fileNo++) {
+                String fileName = WALManager.getWALFileName(fileNo);
+                BufferManager bufferManager = storageManager.getBufferManager();
+                DBFile file = bufferManager.getFile(fileName);
+                if (file == null) { // File is not currently open, must be read from disk
+                    file = storageManager.getFileManager().openDBFile(fileName);
+                    if (fileNo == firstFileNo) {
+                        // Must only write pages after the current txnStateNextLSN in this file
+                        int firstPageNo = 0;
+                        while (txnStateNextLSN.compareTo(bufferManager.getPage(file, firstPageNo).getPageLSN()) < 0) {
+                            firstPageNo++;
+                        }
+                        bufferManager.writeDBFile(file, firstPageNo, file.getNumPages() - 1, false);
+
+                    } else if (fileNo == lastFileNo) {
+                        // Must only write pages up to and including the WAL-lsn
+                        int lastPageNo = 0;
+                        while (lsn.compareTo(bufferManager.getPage(file, lastPageNo).getPageLSN()) < 0) {
+                            lastPageNo++;
+                        }
+                        bufferManager.writeDBFile(file, 0, lastPageNo, false);
+
+                    } else { // If not the first or last file, we must write all the dirty pages of the file
+                        bufferManager.writeDBFile(file, false);
+                    }
+                } else { // File is currently in buffer
+                    if (fileNo == firstFileNo) {
+                        // Must only write pages after the the current txnStateNextLSN in this file
+                        int firstPageNo = 0;
+                        while (txnStateNextLSN.compareTo(bufferManager.getPage(file, firstPageNo).getPageLSN()) < 0) {
+                            firstPageNo++;
+                        }
+                        bufferManager.writeDBFile(file, firstPageNo, file.getNumPages() - 1, true);
+
+                    } else if (fileNo == lastFileNo) {
+                        // Must only write pages up to and including the WAL-lsn
+                        int lastPageNo = 0;
+                        while (lsn.compareTo(bufferManager.getPage(file, lastPageNo).getPageLSN()) < 0) {
+                            lastPageNo++;
+                        }
+                        bufferManager.writeDBFile(file, 0, lastPageNo, true);
+
+                    } else { // If not the first or last file, we must write all the dirty pages of the file
+                        bufferManager.writeDBFile(file, true);
+                    }
+                }
+            }
+        }
+
         // Note that the "next LSN" value must be determined from both the
         // current LSN *and* its record size; otherwise we lose the last log
-        // record in the WAL file.  You can use this static method:
-        //
-        // int lastPosition = lsn.getFileOffset() + lsn.getRecordSize();
-        // WALManager.computeNextLSN(lsn.getLogFileNo(), lastPosition);
+        // record in the WAL file.
+        int lastPosition = lsn.getFileOffset() + lsn.getRecordSize();
+        txnStateNextLSN = WALManager.computeNextLSN(lsn.getLogFileNo(), lastPosition);
+        // Updates transaction state after correct files are written
+        storeTxnStateToFile();
+
+
+
     }
 
 
