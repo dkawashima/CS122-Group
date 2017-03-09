@@ -409,7 +409,6 @@ public class TransactionManager implements BufferManagerObserver {
      */
     @Override
     public void beforeWriteDirtyPages(List<DBPage> pages) throws IOException {
-        // TODO:  IMPLEMENT
         //
         // This implementation must enforce the write-ahead logging rule (aka
         // the WAL rule) by ensuring that the write-ahead log reflects all
@@ -432,6 +431,23 @@ public class TransactionManager implements BufferManagerObserver {
         //
         // Finally, you can use the forceWAL(LogSequenceNumber) function to
         // force the WAL to be written out to the specified LSN.
+
+        for (int i = 0; i < pages.size(); i++ ){
+            DBPage curPage = pages.get(i);
+            // If it is WRITE_AHEAD_LOG_FILE or TXNSTATE_FILE, then ignore the page.
+            if (curPage.getDBFile().getType() == DBFileType.WRITE_AHEAD_LOG_FILE ||
+                    curPage.getDBFile().getType() == DBFileType.TXNSTATE_FILE){
+                continue;
+            }
+            LogSequenceNumber curLSN = curPage.getPageLSN();
+            // Throw exception if page does not have LSN when it is supposed to
+            if (curLSN == null){
+                throw new IOException("Page does not have LSN");
+            }
+            // Force WAL for this page's LSN, given that this LSN does exist
+            forceWAL(curLSN);
+
+        }
     }
 
 
@@ -449,8 +465,11 @@ public class TransactionManager implements BufferManagerObserver {
      *         going to be broken.
      */
     public void forceWAL(LogSequenceNumber lsn) throws IOException {
-        /* TODO: Why is this atomic and durable?
-         *
+        /* This operation is durable because we are storing the data from the transaction
+         * (everything in between the txnStateNextLSN and the WAL-lsn) on the
+         * disk. It is also atomic because we do not officially record that the data has
+         * been written to disk until we store the transaction state to file, which is
+         * a one-step process, ensured that all commits are recorded at once.
          */
 
         // This transaction's LSN has already been written to disk, so we can ignore this call
