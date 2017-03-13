@@ -1080,7 +1080,34 @@ public class WALManager {
             logger.debug(String.format(
                 "Undoing WAL record at %s.  Type = %s, TxnID = %d",
                 lsn, type, transactionID));
+            if (type == WALRecordType.UPDATE_PAGE){
+                // Read in LSN info, create previous LSN object
+                int prevLSN_file_num = walReader.readUnsignedShort();
+                int prevLSN_file_offset = walReader.readInt();
+                LogSequenceNumber prevLSN = new LogSequenceNumber(prevLSN_file_num, prevLSN_file_offset);
 
+                // Acquire this record's corresponding dbPage, read in number of segments
+                String filename = walReader.readVarString255();
+                DBFile dbFile = storageManager.getFileManager().openDBFile(filename);
+                int page_no = walReader.readUnsignedShort();
+                int numSegments = walReader.readUnsignedShort();
+                DBPage dbPage = storageManager.loadDBPage(dbFile, page_no);
+
+                // Get data from before this update occurred, undoing the transaction and
+                // writing the previous data to the log as redo-only update, completing the rollback.
+                byte[] undoData = applyUndoAndGenRedoOnlyData(walReader, dbPage, numSegments);
+                writeRedoOnlyUpdatePageRecord(dbPage, numSegments, undoData);
+
+                // Set lsn to previous LSN to continue walking backward through WAL
+                lsn = prevLSN;
+
+            } else if (type == WALRecordType.START_TXN) {
+                // Rollback is done
+                break;
+            } else {
+                throw new WALFileException(String.format("Record is of incorrect type %s",
+                        type.toString()));
+            }
             // TODO:  IMPLEMENT THE REST
             //
             //        Use logging statements liberally to help verify and
@@ -1090,10 +1117,6 @@ public class WALManager {
             //        WALFileException to indicate the problem immediately.
             //
             // TODO:  SET lsn TO PREVIOUS LSN TO WALK BACKWARD THROUGH WAL.
-
-            // TODO:  This break is just here so the code will compile; when
-            //        you provide your own implementation, get rid of it!
-            break;
         }
 
         // All done rolling back the transaction!  Record that it was aborted
