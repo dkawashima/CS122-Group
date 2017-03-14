@@ -19,6 +19,7 @@ import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.transactions.TransactionManager;
 import edu.caltech.nanodb.transactions.TransactionState;
 import edu.caltech.nanodb.util.ArrayUtil;
+import java.util.ArrayList;
 
 
 /**
@@ -244,6 +245,8 @@ public class WALManager {
 
         LogSequenceNumber oldLSN = null;
         DBFileReader walReader = null;
+
+        //ArrayList<Integer> incompleteTrans = new ArrayList<Integer>();
         while (currLSN.compareTo(recoveryInfo.nextLSN) < 0) {
             if (oldLSN == null || oldLSN.getLogFileNo() != currLSN.getLogFileNo())
                 walReader = getWALFileReader(currLSN);
@@ -258,7 +261,6 @@ public class WALManager {
                 "Redo:  examining WAL record at %s.  Type = %s, TxnID = %d",
                 currLSN, type, transactionID));
 
-            // TODO:  IMPLEMENT THE REST
             //
             //        Use logging statements liberally to help verify and
             //        debug your work.
@@ -267,20 +269,52 @@ public class WALManager {
             //        WALFileException to indicate the problem immediately.
             //
             //        You can use Java enums in a switch statement, like this:
-            //
-            //            switch (type) {
-            //            case START_TXN:
-            //                ...
-            //
-            //            case COMMIT_TXN:
-            //                ...
-            //
-            //            default:
-            //                throw new WALFileException(
-            //                    "Encountered unrecognized WAL record type " +
-            //                    type + " at LSN " + currLSN +
-            //                    " during redo processing!");
-            //            }
+
+            switch (type) {
+                case START_TXN:
+                    // Add transaction as incomplete, move past end of start transaction
+                    recoveryInfo.updateInfo(transactionID, currLSN);
+                    // Move past end of start transaction
+                    walReader.readByte();
+                    break;
+                case COMMIT_TXN:
+                case ABORT_TXN:
+                    // Record this transaction as completed
+                    recoveryInfo.recordTxnCompleted(transactionID);
+                    // Skip past previous LSN information
+                    walReader.readShort();
+                    walReader.readInt();
+                    // Advance past end of commit/abort transaction
+                    walReader.readByte();
+                    break;
+                case UPDATE_PAGE:
+                case UPDATE_PAGE_REDO_ONLY:
+                    // Skip past previous LSN information
+                    walReader.readUnsignedShort();
+                    walReader.readInt();
+
+                    // Acquire this record's corresponding dbPage, read in number of segments
+                    String filename = walReader.readVarString255();
+                    DBFile dbFile = storageManager.getFileManager().openDBFile(filename);
+                    int page_no = walReader.readUnsignedShort();
+                    int numSegments = walReader.readUnsignedShort();
+                    DBPage dbPage = storageManager.loadDBPage(dbFile, page_no);
+
+                    // Replays all state changes stored in WAL
+                    applyRedo(type, walReader, dbPage, numSegments);
+
+                    // Advances past end of update/update-redo-only transaction
+                    walReader.readInt();
+                    walReader.readByte();
+
+                    // Update last LSN of incomplete transaction
+                    recoveryInfo.updateInfo(transactionID, currLSN);
+                    break;
+                default:
+                    throw new WALFileException("Encountered unrecognized WAL record type " +
+                            type + " at LSN " + currLSN +
+                            " during redo processing!");
+            }
 
             oldLSN = currLSN;
             currLSN = computeNextLSN(currLSN.getLogFileNo(), walReader.getPosition());
@@ -424,7 +458,6 @@ public class WALManager {
                 "Undo:  examining WAL record at %s.  Type = %s, TxnID = %d",
                 currLSN, type, transactionID));
 
-            // TODO:  IMPLEMENT THE REST
             //
             //        Use logging statements liberally to help verify and
             //        debug your work.
@@ -434,19 +467,43 @@ public class WALManager {
             //
             //        You can use Java enums in a switch statement, like this:
             //
-            //            switch (type) {
-            //            case START_TXN:
-            //                ...
-            //
-            //            case COMMIT_TXN:
-            //                ...
-            //
-            //            default:
-            //                throw new WALFileException(
-            //                    "Encountered unrecognized WAL record type " +
-            //                    type + " at LSN " + currLSN +
-            //                    " during undo processing!");
-            //            }
+            switch (type) {
+                case START_TXN:
+                    // Rollback is successful; mark this transaction as complete
+                    recoveryInfo.recordTxnCompleted(transactionID);
+                    break;
+                case UPDATE_PAGE:
+                    // Read in LSN info, create previous LSN object
+                    int prevLSN_file_num = walReader.readUnsignedShort();
+                    int prevLSN_file_offset = walReader.readInt();
+                    LogSequenceNumber prevLSN = new LogSequenceNumber(prevLSN_file_num, prevLSN_file_offset);
+
+                    // Acquire this record's corresponding dbPage, read in number of segments
+                    String filename = walReader.readVarString255();
+                    DBFile dbFile = storageManager.getFileManager().openDBFile(filename);
+                    int page_no = walReader.readUnsignedShort();
+                    int numSegments = walReader.readUnsignedShort();
+                    DBPage dbPage = storageManager.loadDBPage(dbFile, page_no);
+
+                    // Get data from before this update occurred, undoing the transaction and
+                    // writing the previous data to the log as redo-only update, completing the rollback.
+                    byte[] undoData = applyUndoAndGenRedoOnlyData(walReader, dbPage, numSegments);
+                    // We make sure not to rely on the transaction state for this writeXXXX() method
+                    writeRedoOnlyUpdatePageRecord(transactionID, prevLSN, dbPage, numSegments, undoData);
+
+                    // Update RecoveryInfo object by setting new last LSN in this changes' prev-LSN
+                    recoveryInfo.updateInfo(transactionID, prevLSN);
+
+                case UPDATE_PAGE_REDO_ONLY:
+                case ABORT_TXN:
+                case COMMIT_TXN:
+                    break;
+                default:
+                    throw new WALFileException(
+                    "Encountered unrecognized WAL record type " +
+                    type + " at LSN " + currLSN +
+                " during undo processing!");
+             }
 
             oldLSN = currLSN;
         }
