@@ -88,9 +88,7 @@ public class HeapTupleFileManager implements TupleFileManager {
         TableStats stats = statsWriter.readTableStats(hpReader, schema);
 
         headerPage.unpin();
-        /*// Log change to write-ahead log
-        storageManager.logDBPageWrite(headerPage);
-        System.out.println("Opening tuple file..");*/
+
         return new HeapTupleFile(storageManager, this, dbFile, schema, stats);
     }
 
@@ -139,7 +137,6 @@ public class HeapTupleFileManager implements TupleFileManager {
         headerPage.unpin();
         // Log change to write-ahead log
         storageManager.logDBPageWrite(headerPage);
-        System.out.println("Saving metadata..");
     }
 
 

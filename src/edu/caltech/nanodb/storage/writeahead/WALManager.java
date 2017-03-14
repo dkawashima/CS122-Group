@@ -246,7 +246,6 @@ public class WALManager {
         LogSequenceNumber oldLSN = null;
         DBFileReader walReader = null;
 
-        //ArrayList<Integer> incompleteTrans = new ArrayList<Integer>();
         while (currLSN.compareTo(recoveryInfo.nextLSN) < 0) {
             if (oldLSN == null || oldLSN.getLogFileNo() != currLSN.getLogFileNo())
                 walReader = getWALFileReader(currLSN);
@@ -260,15 +259,6 @@ public class WALManager {
             logger.debug(String.format(
                 "Redo:  examining WAL record at %s.  Type = %s, TxnID = %d",
                 currLSN, type, transactionID));
-
-            //
-            //        Use logging statements liberally to help verify and
-            //        debug your work.
-            //
-            //        If you encounter invalid WAL contents, throw a
-            //        WALFileException to indicate the problem immediately.
-            //
-            //        You can use Java enums in a switch statement, like this:
 
             switch (type) {
                 case START_TXN:
@@ -458,15 +448,6 @@ public class WALManager {
                 "Undo:  examining WAL record at %s.  Type = %s, TxnID = %d",
                 currLSN, type, transactionID));
 
-            //
-            //        Use logging statements liberally to help verify and
-            //        debug your work.
-            //
-            //        If you encounter invalid WAL contents, throw a
-            //        WALFileException to indicate the problem immediately.
-            //
-            //        You can use Java enums in a switch statement, like this:
-            //
             switch (type) {
                 case START_TXN:
                     // Rollback is successful; mark this transaction as complete
@@ -1165,15 +1146,6 @@ public class WALManager {
                 throw new WALFileException(String.format("Record is of incorrect type %s",
                         type.toString()));
             }
-            // TODO:  IMPLEMENT THE REST
-            //
-            //        Use logging statements liberally to help verify and
-            //        debug your work.
-            //
-            //        If you encounter invalid WAL contents, throw a
-            //        WALFileException to indicate the problem immediately.
-            //
-            // TODO:  SET lsn TO PREVIOUS LSN TO WALK BACKWARD THROUGH WAL.
         }
 
         // All done rolling back the transaction!  Record that it was aborted
