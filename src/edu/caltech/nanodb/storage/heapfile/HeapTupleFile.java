@@ -379,7 +379,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
 
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), -1);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
-
+            // Log change to write-ahead log
+            storageManager.logDBPageWrite(headerpage);
         }
         else {
             pageNo = begin_list_pointer;
@@ -462,7 +463,8 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, pageNo);
 
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), old_head);
-
+            // Log change to write-ahead log
+            storageManager.logDBPageWrite(headerpage);
         }
         headerpage.unpin();
 
@@ -509,8 +511,6 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
         dbPage.unpin();
         // Log change to write-ahead log
         storageManager.logDBPageWrite(dbPage);
-        // Log change to write-ahead log
-        storageManager.logDBPageWrite(headerpage);
         return pageTup;
     }
 
@@ -599,6 +599,7 @@ page_scan:  // So we can break out of the outer loop from inside the inner loop.
             dbPage.writeInt(DataPage.getTupleDataEnd(dbPage), begin_list_pointer);
             headerpage.writeInt(HeaderPage.OFFSET_BEGIN_PTR_START, dbPage.getPageNo());
             headerpage.unpin();
+
             // Log change to write-ahead log
             storageManager.logDBPageWrite(headerpage);
         }

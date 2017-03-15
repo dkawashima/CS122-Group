@@ -97,8 +97,7 @@ public class TransactionsTest extends SqlTestCase {
             new TupleLiteral(  "-1" ,"father joseph" ),
             new TupleLiteral(  "1"  ,"rob" ),
             new TupleLiteral(  "2"  ,"job" ),
-            new TupleLiteral(  "0"  ,"slob" ),
-            new TupleLiteral( "Harrison" )
+            new TupleLiteral(  "0"  ,"slob" )
         };
         assert checkUnorderedResults(expected, result);
 
@@ -111,15 +110,35 @@ public class TransactionsTest extends SqlTestCase {
      * @throws Exception if any query parsing or execution issues occur.
      **/
     public void basicRollBack() throws Throwable {
-
-        // TODO: 2
-        // TransactionsTest
-        // result = server.doCommand("", false);
-
         CommandResult result;
 
-        // Insert rows
-        // result = server.doCommand();
+        // Create table, insert(before transaction start), start transaction
+        result = server.doCommand("create table basicRollBackTransactionsTest (id varchar(5), name varchar(40))", false);
+        result = server.doCommand("insert into basicRollBackTransactionsTest values ('-1', 'father joseph')", false);
+        result = server.doCommand("begin transaction", false);
+
+        // Insert Rows
+        result = server.doCommand("insert into basicRollBackTransactionsTest values ('0', 'bob')", false);
+        result = server.doCommand("insert into basicRollBackTransactionsTest values ('1', 'rob')", false);
+        result = server.doCommand("insert into basicRollBackTransactionsTest values ('2', 'job')", false);
+        result = server.doCommand("insert into basicRollBackTransactionsTest values ('3', 'nob')", false);
+
+        // Update
+        result = server.doCommand("update basicRollBackTransactionsTest set name='slob' where id='0'", false);
+
+        // Delete
+        result = server.doCommand("delete from basicRollBackTransactionsTest where id='3'", false);
+
+        // Rollback
+        result = server.doCommand("rollback", false);
+
+        // Check results
+        result = server.doCommand("select * from basicRollBackTransactionsTest", true);
+        TupleLiteral[] expected = {
+            new TupleLiteral(  "-1" ,"father joseph" )
+        };
+        assert checkUnorderedResults(expected, result);
+
     }
 
     /**
@@ -142,6 +161,8 @@ public class TransactionsTest extends SqlTestCase {
 
         // Insert rows
         // result = server.doCommand();
+
+        assert false;
 
     }
 
@@ -172,6 +193,9 @@ public class TransactionsTest extends SqlTestCase {
         // };
         // assert checkSizeResults(expected2, result);
         // assert checkOrderedResults(expected2, result);
+
+
+        assert false;
     }
 
     /*

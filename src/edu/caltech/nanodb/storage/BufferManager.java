@@ -793,7 +793,6 @@ public class BufferManager {
                 dirtyPages.add(oldPage);
             }
         }
-
         writeDirtyPages(dirtyPages, /* invalidate */ false);
 
         if (sync) {

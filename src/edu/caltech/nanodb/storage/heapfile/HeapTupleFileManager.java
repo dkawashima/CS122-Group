@@ -88,6 +88,7 @@ public class HeapTupleFileManager implements TupleFileManager {
         TableStats stats = statsWriter.readTableStats(hpReader, schema);
 
         headerPage.unpin();
+
         return new HeapTupleFile(storageManager, this, dbFile, schema, stats);
     }
 
