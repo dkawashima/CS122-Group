@@ -19,7 +19,7 @@
   -->
 
   <!-- For running through all the tests. -->
-<!--   <test name="general-tests">
+  <test name="general-tests">
     <packages>
       <package name="edu.caltech.test.nanodb.expressions" />
       <package name="edu.caltech.test.nanodb.relations" />
@@ -46,8 +46,8 @@
       <package name="edu.caltech.test.nanodb.sql" />
       <package name="edu.caltech.test.nanodb.functions" />
     </packages>
-  </test> -->
-<!-- 
+  </test>
+
   <test name="assignment5-tests">
     <classes>
       <class name="edu.caltech.test.nanodb.sql.TestScalarSubquery" />
@@ -89,12 +89,11 @@
         </methods>
       </class>
     </classes>
-  </test> -->
+  </test>
 
     <test name="assignment7-tests">
     <classes>
       <class name="edu.caltech.test.nanodb.transactions.TransactionsTest" />
-      <!-- <class name="edu.caltech.test.nanodb.transactions.RecoveryProcessingTest" /> -->
     </classes>
   </test>
 
