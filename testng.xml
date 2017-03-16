@@ -41,12 +41,12 @@
     </classes>
   </test>
 
-  <test name="assignment2-tests">
+<!--   <test name="assignment2-tests">
     <packages>
       <package name="edu.caltech.test.nanodb.sql" />
       <package name="edu.caltech.test.nanodb.functions" />
     </packages>
-  </test>
+  </test> -->
 
   <test name="assignment5-tests">
     <classes>
