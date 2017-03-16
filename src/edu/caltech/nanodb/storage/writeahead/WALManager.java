@@ -293,6 +293,9 @@ public class WALManager {
                     // Replays all state changes stored in WAL
                     applyRedo(type, walReader, dbPage, numSegments);
 
+                    // Reset Current LSN (prevents null LSN on restart)
+                    dbPage.setPageLSN(currLSN);
+
                     // Advances past end of update/update-redo-only transaction
                     walReader.readInt();
                     walReader.readByte();
