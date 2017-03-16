@@ -93,8 +93,8 @@
 
     <test name="assignment7-tests">
     <classes>
-      <!-- <class name="edu.caltech.test.nanodb.transactions.TransactionsTest" /> -->
-      <class name="edu.caltech.test.nanodb.transactions.RecoveryProcessingTest" />
+      <class name="edu.caltech.test.nanodb.transactions.TransactionsTest" />
+      <!-- <class name="edu.caltech.test.nanodb.transactions.RecoveryProcessingTest" /> -->
     </classes>
   </test>
 
