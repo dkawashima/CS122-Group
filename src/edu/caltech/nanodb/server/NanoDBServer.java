@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.io.File;
 
 import edu.caltech.nanodb.queryeval.PlannerFactory;
 import edu.caltech.nanodb.server.properties.PropertyRegistry;
@@ -65,6 +66,39 @@ public class NanoDBServer {
         logger.info("Initializing storage manager.");
         storageManager = new StorageManager();
         storageManager.initialize(this, null);  // Use default base directory.
+
+        // Register properties that are in parts of NanoDB that don't get
+        // specifically initialized.
+
+        propertyRegistry.registerProperties(
+            new PlannerFactory.PlannerFactoryPropertyHandler(),
+            PlannerFactory.PROP_PLANNER_CLASS);
+    }
+
+
+    /**
+     * This static method encapsulates all of the operations necessary for
+     * cleanly starting the NanoDB server.
+     *
+     * Implemented for CS122 HW7. I was having a problem where the test
+     * was writing to the default folder (datafiles) and not the test 
+     * folder (test_datafiles). This is my attempt to fix it for the HW.
+     *
+     * @throws IOException if a fatal error occurs during startup.
+     */
+    public void startup(File baseDir) throws IOException {
+        // Start up the database by doing the appropriate startup processing.
+
+        // Start with objects that a lot of database components need.
+
+        eventDispatcher = new EventDispatcher();
+        propertyRegistry = new PropertyRegistry();
+
+        // The storage manager is a big one!
+
+        logger.info("Initializing storage manager.");
+        storageManager = new StorageManager();
+        storageManager.initialize(this, baseDir);  // Use default base directory.
 
         // Register properties that are in parts of NanoDB that don't get
         // specifically initialized.

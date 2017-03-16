@@ -47,7 +47,7 @@
       <package name="edu.caltech.test.nanodb.functions" />
     </packages>
   </test> -->
-
+<!-- 
   <test name="assignment5-tests">
     <classes>
       <class name="edu.caltech.test.nanodb.sql.TestScalarSubquery" />
@@ -89,11 +89,12 @@
         </methods>
       </class>
     </classes>
-  </test>
+  </test> -->
 
     <test name="assignment7-tests">
     <classes>
-      <class name="edu.caltech.test.nanodb.transactions.TransactionsTest" />
+      <!-- <class name="edu.caltech.test.nanodb.transactions.TransactionsTest" /> -->
+      <class name="edu.caltech.test.nanodb.transactions.RecoveryProcessingTest" />
     </classes>
   </test>
 

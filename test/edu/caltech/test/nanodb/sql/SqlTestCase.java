@@ -69,19 +69,33 @@ public class SqlTestCase {
         this(null);
     }
 
+    /*
+     * Implemented for CS122 HW7. I was having a problem where the test
+     * was writing to the default folder (datafiles) and not the test 
+     * folder (test_datafiles). This is part of my attempt to fix it for the HW.
+     */
+    public File getTestBaseDir() {
+        return testBaseDir;
+    }
+
 
     @BeforeClass
     public void beforeClass() throws Exception {
         // Set up a separate testing data-directory so that we don't clobber
         // any existing data.
         testBaseDir = new File("test_datafiles");
-        if (!testBaseDir.exists())
+        if (!testBaseDir.exists()){
             testBaseDir.mkdirs();
-        else
-            //FileUtils.cleanDirectory(testBaseDir);
+        }
+        else{
+            FileUtils.cleanDirectory(testBaseDir);
+        }
 
         // Make sure the database server uses the testing base-directory, not
         // the normal base-directory.
+
+
+
         System.setProperty(StorageManager.PROP_BASEDIR,
             testBaseDir.getAbsolutePath());
 
