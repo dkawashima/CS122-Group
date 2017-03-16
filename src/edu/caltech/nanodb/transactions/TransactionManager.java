@@ -445,7 +445,7 @@ public class TransactionManager implements BufferManagerObserver {
             LogSequenceNumber curLSN = curPage.getPageLSN();
             // Log warning if page does not have LSN when it is supposed to
             if (curLSN == null){
-                logger.warn("Warning: Page does not have LSN");
+                logger.warn("Warning: Page " + curPage.getPageNo() + " does not have LSN");
                 continue;
             }
 
